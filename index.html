@@ -10,8 +10,90 @@
   </head>
   <body class="bg-[#FFF7ED] font-sans text-slate-900 antialiased transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100">
     <div id="app" class="min-h-screen flex flex-col">
-      <!-- Header -->
-      <header class="bg-white/80 backdrop-blur-md border-b border-orange-100 sticky top-0 z-30 dark:bg-slate-900 dark:border-slate-800">
+      <!-- Landing Page View -->
+      <div id="landing-view" class="flex-1 flex flex-col">
+        <!-- Landing Header -->
+        <header class="max-w-7xl mx-auto w-full px-6 py-8 flex items-center justify-between">
+          <div class="flex items-center gap-3 cursor-pointer" id="landing-logo">
+            <div class="bg-gradient-to-br from-orange-400 to-orange-600 p-2.5 rounded-2xl text-white shadow-lg">
+              <i data-lucide="wallet" class="w-6 h-6"></i>
+            </div>
+            <h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Chi Tiêu <span class="text-orange-600">Pro</span></h1>
+          </div>
+          <div class="flex items-center gap-6">
+            <button id="landing-home-btn" class="hidden md:block text-sm font-bold text-slate-600 dark:text-slate-300 hover:text-orange-600 dark:hover:text-orange-400 transition-colors">Trang chủ</button>
+            <button id="landing-features-btn" class="hidden md:block text-sm font-bold text-slate-600 dark:text-slate-300 hover:text-orange-600 dark:hover:text-orange-400 transition-colors">Tính năng</button>
+            <button id="landing-login-btn" class="px-6 py-2.5 rounded-xl font-bold text-sm text-slate-600 dark:text-slate-300 hover:bg-orange-50 dark:hover:bg-slate-800 transition-all border border-orange-100 dark:border-slate-800 hover:scale-105 active:scale-95 shadow-sm hover:shadow-md">
+              Đăng nhập
+            </button>
+          </div>
+        </header>
+
+        <!-- Hero Section -->
+        <main class="flex-1 flex flex-col items-center justify-center px-6 text-center max-w-4xl mx-auto py-20">
+          <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 text-xs font-bold uppercase tracking-widest mb-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <i data-lucide="sparkles" class="w-4 h-4"></i>
+            Quản lý tài chính thông minh với AI
+          </div>
+          <h2 class="text-5xl md:text-7xl font-black text-slate-900 dark:text-white tracking-tight mb-6 leading-[1.1] animate-in fade-in slide-in-from-bottom-6 duration-1000">
+            Làm chủ <span class="text-orange-600">túi tiền</span> của bạn một cách dễ dàng.
+          </h2>
+          <p class="text-lg md:text-xl text-slate-500 dark:text-slate-400 mb-12 max-w-2xl animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-200">
+            Chi Tiêu Pro giúp bạn theo dõi từng đồng, thiết lập ngân sách thông minh và đạt được những mục tiêu tài chính lớn lao với sự trợ giúp của AI.
+          </p>
+          <div class="flex flex-col sm:flex-row gap-4 animate-in fade-in slide-in-from-bottom-10 duration-1000 delay-300">
+            <button id="get-started-btn" class="px-10 py-5 bg-orange-600 hover:bg-orange-700 text-white rounded-2xl font-black text-lg shadow-2xl shadow-orange-200 dark:shadow-none transition-all hover:-translate-y-1 active:translate-y-0 hover:scale-105">
+              Bắt đầu ngay - Miễn phí
+            </button>
+            <button id="learn-more-btn" class="px-10 py-5 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 rounded-2xl font-bold text-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-all hover:scale-105 active:scale-95 shadow-sm hover:shadow-md">
+              Tìm hiểu thêm
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mt-32 w-full text-left" id="features-section">
+            <div class="p-8 bg-white dark:bg-slate-900 rounded-[2.5rem] border border-orange-50 dark:border-slate-800 shadow-xl shadow-orange-100/20 dark:shadow-none hover:shadow-2xl hover:shadow-orange-200/30 dark:hover:shadow-blue-900/20 transition-all duration-500 hover:-translate-y-2 group">
+              <div class="w-12 h-12 bg-blue-50 dark:bg-blue-900/20 rounded-2xl flex items-center justify-center text-blue-600 mb-6 group-hover:scale-110 transition-transform">
+                <i data-lucide="zap" class="w-6 h-6"></i>
+              </div>
+              <h3 class="text-xl font-bold mb-3 text-slate-900 dark:text-white">Ghi chép nhanh</h3>
+              <p class="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">Nhập giao dịch chỉ trong vài giây với giao diện tối giản và mượt mà.</p>
+            </div>
+            <div class="p-8 bg-white dark:bg-slate-900 rounded-[2.5rem] border border-orange-50 dark:border-slate-800 shadow-xl shadow-orange-100/20 dark:shadow-none hover:shadow-2xl hover:shadow-orange-200/30 dark:hover:shadow-emerald-900/20 transition-all duration-500 hover:-translate-y-2 group">
+              <div class="w-12 h-12 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl flex items-center justify-center text-emerald-600 mb-6 group-hover:scale-110 transition-transform">
+                <i data-lucide="pie-chart" class="w-6 h-6"></i>
+              </div>
+              <h3 class="text-xl font-bold mb-3 text-slate-900 dark:text-white">Phân tích trực quan</h3>
+              <p class="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">Biểu đồ sinh động giúp bạn hiểu rõ tiền của mình đang đi đâu mỗi tháng.</p>
+            </div>
+            <div class="p-8 bg-white dark:bg-slate-900 rounded-[2.5rem] border border-orange-50 dark:border-slate-800 shadow-xl shadow-orange-100/20 dark:shadow-none hover:shadow-2xl hover:shadow-orange-200/30 dark:hover:shadow-orange-900/20 transition-all duration-500 hover:-translate-y-2 group">
+              <div class="w-12 h-12 bg-orange-50 dark:bg-orange-900/20 rounded-2xl flex items-center justify-center text-orange-600 mb-6 group-hover:scale-110 transition-transform">
+                <i data-lucide="target" class="w-6 h-6"></i>
+              </div>
+              <h3 class="text-xl font-bold mb-3 text-slate-900 dark:text-white">Mục tiêu tiết kiệm</h3>
+              <p class="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">Thiết lập và theo dõi tiến độ hoàn thành những ước mơ lớn của bạn.</p>
+            </div>
+          </div>
+        </main>
+
+        <footer class="p-12 text-center">
+          <div class="flex items-center justify-center gap-6 mb-4">
+            <button id="footer-home-btn" class="text-xs font-bold text-slate-400 hover:text-orange-600 transition-colors uppercase tracking-widest">Trang chủ</button>
+            <button id="footer-features-btn" class="text-xs font-bold text-slate-400 hover:text-orange-600 transition-colors uppercase tracking-widest">Tính năng</button>
+            <button id="footer-login-btn" class="text-xs font-bold text-slate-400 hover:text-orange-600 transition-colors uppercase tracking-widest">Đăng nhập</button>
+          </div>
+          <p class="text-slate-400 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">&copy; 2026 Chi Tiêu Pro &bull; Đơn giản & Hiệu quả</p>
+        </footer>
+      </div>
+
+      <!-- Dashboard View (Hidden by default) -->
+      <div id="dashboard-view" class="hidden flex-1 flex flex-col">
+        <!-- Floating Action Button for Mobile -->
+        <button id="fab-add" class="md:hidden fixed bottom-8 right-8 w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-700 text-white rounded-full shadow-2xl flex items-center justify-center z-50 hover:scale-110 active:scale-90 transition-all">
+          <i data-lucide="plus" class="w-8 h-8"></i>
+        </button>
+
+        <!-- Header -->
+        <header class="bg-white/80 backdrop-blur-md border-b border-orange-100 sticky top-0 z-30 dark:bg-slate-900 dark:border-slate-800">
         <div class="max-w-7xl mx-auto px-4 md:px-6 h-18 flex items-center justify-between">
           <div class="flex items-center gap-3 cursor-pointer group relative" id="logo-menu-trigger">
             <div class="bg-gradient-to-br from-orange-400 to-orange-600 p-2.5 rounded-2xl text-white shadow-lg shadow-orange-200/50 group-hover:scale-110 transition-transform">
@@ -19,12 +101,22 @@
             </div>
             <div class="hidden sm:block">
               <h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white leading-none">Chi Tiêu <span class="text-orange-600">Pro</span></h1>
-              <p class="text-[10px] uppercase tracking-widest font-bold text-slate-400 mt-1">Quản lý tài chính thông minh</p>
+              <div class="flex items-center gap-4 mt-1">
+                <p class="text-[10px] uppercase tracking-widest font-bold text-slate-400">Quản lý tài chính thông minh</p>
+                <span class="text-slate-200 dark:text-slate-700">|</span>
+                <button id="header-home-link" class="text-[10px] uppercase tracking-widest font-bold text-orange-600 hover:text-orange-700 transition-colors">Trang chủ</button>
+              </div>
             </div>
             
             <!-- Logo Menu Dropdown -->
             <div id="logo-menu" class="absolute left-0 top-full mt-4 w-64 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[2rem] shadow-2xl opacity-0 invisible transition-all z-50 p-4 space-y-2">
               <p class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-4 mb-2">Menu Phím Tắt</p>
+              <button id="dashboard-home-btn" class="w-full text-left px-4 py-3 text-sm font-bold hover:bg-orange-50 dark:hover:bg-slate-800 rounded-2xl transition-all flex items-center gap-3 text-slate-700 dark:text-slate-300">
+                <div class="p-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg text-orange-600">
+                  <i data-lucide="home" class="w-4 h-4"></i>
+                </div>
+                Trang chủ
+              </button>
               <button data-scroll="stats-section" class="w-full text-left px-4 py-3 text-sm font-bold hover:bg-orange-50 dark:hover:bg-slate-800 rounded-2xl transition-all flex items-center gap-3 text-slate-700 dark:text-slate-300">
                 <div class="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600">
                   <i data-lucide="pie-chart" class="w-4 h-4"></i>
@@ -82,14 +174,14 @@
               </button>
               <!-- Dropdown (Mock Auth) -->
               <div id="auth-dropdown" class="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 p-2">
-                <button class="w-full text-left px-4 py-2 text-sm font-medium hover:bg-orange-50 dark:hover:bg-slate-800 rounded-xl transition-colors flex items-center gap-2">
+                <button id="dropdown-login-btn" class="w-full text-left px-4 py-2 text-sm font-medium hover:bg-orange-50 dark:hover:bg-slate-800 rounded-xl transition-colors flex items-center gap-2">
                   <i data-lucide="user" class="w-4 h-4"></i> Đăng nhập
                 </button>
-                <button class="w-full text-left px-4 py-2 text-sm font-medium hover:bg-orange-50 dark:hover:bg-slate-800 rounded-xl transition-colors flex items-center gap-2">
+                <button id="dropdown-register-btn" class="w-full text-left px-4 py-2 text-sm font-medium hover:bg-orange-50 dark:hover:bg-slate-800 rounded-xl transition-colors flex items-center gap-2">
                   <i data-lucide="user-plus" class="w-4 h-4"></i> Đăng ký
                 </button>
                 <div class="h-px bg-slate-100 dark:bg-slate-800 my-1"></div>
-                <button class="w-full text-left px-4 py-2 text-sm font-medium text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition-colors flex items-center gap-2">
+                <button id="dropdown-logout-btn" class="w-full text-left px-4 py-2 text-sm font-medium text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition-colors flex items-center gap-2">
                   <i data-lucide="log-out" class="w-4 h-4"></i> Đăng xuất
                 </button>
               </div>
@@ -186,7 +278,7 @@
             </div>
 
             <!-- Budget Section -->
-            <div class="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-orange-50 dark:border-slate-800">
+            <div class="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-orange-50 dark:border-slate-800 hover:shadow-xl transition-all duration-500">
               <div class="flex items-center justify-between mb-6">
                 <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-3">
                   <span class="w-1.5 h-5 bg-orange-500 rounded-full"></span>
@@ -200,7 +292,7 @@
             </div>
 
             <!-- Chart Section -->
-            <div class="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-orange-50 dark:border-slate-800">
+            <div class="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-orange-50 dark:border-slate-800 hover:shadow-xl transition-all duration-500">
               <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-3">
                 <span class="w-1.5 h-5 bg-orange-500 rounded-full"></span>
                 Phân bổ chi tiêu
@@ -211,7 +303,7 @@
             </div>
 
             <!-- Trend Chart Section -->
-            <div class="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-orange-50 dark:border-slate-800">
+            <div class="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-orange-50 dark:border-slate-800 hover:shadow-xl transition-all duration-500">
               <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-3">
                 <span class="w-1.5 h-5 bg-orange-500 rounded-full"></span>
                 Xu hướng chi tiêu
@@ -222,7 +314,7 @@
             </div>
 
             <!-- Dream Goals Section -->
-            <div id="dream-goals-section" class="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-orange-50 dark:border-slate-800">
+            <div id="dream-goals-section" class="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-orange-50 dark:border-slate-800 hover:shadow-xl transition-all duration-500">
               <div class="flex items-center justify-between mb-6">
                 <div class="flex flex-col">
                   <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-3">
@@ -244,7 +336,7 @@
           <!-- Right Column: Transactions & Form -->
           <div class="lg:col-span-8 space-y-8">
             <!-- Transaction Management -->
-            <div id="history-section" class="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-sm border border-orange-50 dark:border-slate-800 overflow-hidden">
+            <div id="history-section" class="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-sm border border-orange-50 dark:border-slate-800 overflow-hidden hover:shadow-xl transition-all duration-500">
               <div class="p-6 border-b border-slate-50 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <h3 class="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
                   <span class="w-1.5 h-6 bg-orange-600 dark:bg-orange-500 rounded-full"></span>
@@ -303,7 +395,7 @@
             </div>
 
             <!-- Add Transaction Form -->
-            <div id="add-transaction-section" class="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] shadow-sm border border-orange-50 dark:border-slate-800">
+            <div id="add-transaction-section" class="bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] shadow-sm border border-orange-50 dark:border-slate-800 hover:shadow-xl transition-all duration-500">
               <div class="flex items-center justify-between mb-8">
                 <h3 class="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
                   <span class="w-1.5 h-6 bg-orange-500 rounded-full"></span>
@@ -359,159 +451,25 @@
             </div>
           </div>
         </div>
+        
+        <!-- Dashboard Footer -->
+        <footer class="max-w-7xl mx-auto w-full px-6 py-12 border-t border-slate-100 dark:border-slate-800 mt-12">
+          <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+            <div class="flex items-center gap-3">
+              <div class="bg-orange-100 dark:bg-orange-900/20 p-2 rounded-xl text-orange-600">
+                <i data-lucide="wallet" class="w-5 h-5"></i>
+              </div>
+              <p class="text-sm font-bold text-slate-900 dark:text-white">Chi Tiêu Pro</p>
+            </div>
+            <div class="flex items-center gap-8">
+              <button id="dashboard-footer-home" class="text-xs font-bold text-slate-400 hover:text-orange-600 transition-colors uppercase tracking-widest">Trang chủ</button>
+              <button id="dashboard-footer-stats" class="text-xs font-bold text-slate-400 hover:text-orange-600 transition-colors uppercase tracking-widest">Thống kê</button>
+              <button id="dashboard-footer-history" class="text-xs font-bold text-slate-400 hover:text-orange-600 transition-colors uppercase tracking-widest">Lịch sử</button>
+            </div>
+            <p class="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">&copy; 2026 &bull; Made with AI</p>
+          </div>
+        </footer>
       </main>
-
-      <!-- Floating Action Button for Mobile -->
-      <button id="fab-add" class="md:hidden fixed bottom-8 right-8 w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-700 text-white rounded-full shadow-2xl flex items-center justify-center z-50 hover:scale-110 active:scale-90 transition-all">
-        <i data-lucide="plus" class="w-8 h-8"></i>
-      </button>
-
-      <!-- Modals (Hidden by default) -->
-      <div id="modal-overlay" class="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/80 backdrop-blur-sm z-[100] hidden items-center justify-center p-4">
-        <!-- Auth Modal -->
-        <div id="auth-modal" class="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 w-full max-w-md hidden animate-in fade-in zoom-in duration-300">
-          <div id="login-form-container">
-            <h3 class="text-2xl font-bold mb-2 text-slate-900 dark:text-white">Chào mừng trở lại!</h3>
-            <p class="text-sm text-slate-400 mb-8">Đăng nhập để quản lý tài chính của bạn.</p>
-            <div class="space-y-4">
-              <div class="space-y-2">
-                <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Email</label>
-                <input type="email" id="login-email" placeholder="email@example.com" class="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-orange-500 transition-all outline-none text-sm font-medium">
-              </div>
-              <div class="space-y-2">
-                <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Mật khẩu</label>
-                <input type="password" id="login-password" placeholder="••••••••" class="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-orange-500 transition-all outline-none text-sm font-medium">
-              </div>
-              <button id="forgot-password-btn" class="text-xs font-bold text-orange-600 dark:text-orange-400 hover:underline block ml-auto">Quên mật khẩu?</button>
-              <button id="do-login-btn" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-orange-100 dark:shadow-none mt-4">
-                Đăng nhập
-              </button>
-              <p class="text-center text-sm text-slate-400 mt-6">
-                Chưa có tài khoản? <button id="switch-to-register" class="text-orange-600 dark:text-orange-400 font-bold hover:underline">Đăng ký ngay</button>
-              </p>
-            </div>
-          </div>
-
-          <div id="register-form-container" class="hidden">
-            <h3 class="text-2xl font-bold mb-2 text-slate-900 dark:text-white">Tạo tài khoản mới</h3>
-            <p class="text-sm text-slate-400 mb-8">Bắt đầu hành trình quản lý tài chính chuyên nghiệp.</p>
-            <div class="space-y-4">
-              <div class="space-y-2">
-                <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Họ và tên</label>
-                <input type="text" id="reg-name" placeholder="Nguyễn Văn A" class="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-orange-500 transition-all outline-none text-sm font-medium">
-              </div>
-              <div class="space-y-2">
-                <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Email</label>
-                <input type="email" id="reg-email" placeholder="email@example.com" class="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-orange-500 transition-all outline-none text-sm font-medium">
-              </div>
-              <div class="space-y-2">
-                <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Mật khẩu</label>
-                <input type="password" id="reg-password" placeholder="••••••••" class="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-orange-500 transition-all outline-none text-sm font-medium">
-              </div>
-              <button id="do-register-btn" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-orange-100 dark:shadow-none mt-4">
-                Đăng ký
-              </button>
-              <p class="text-center text-sm text-slate-400 mt-6">
-                Đã có tài khoản? <button id="switch-to-login" class="text-orange-600 dark:text-orange-400 font-bold hover:underline">Đăng nhập</button>
-              </p>
-            </div>
-          </div>
-
-          <div id="forgot-form-container" class="hidden">
-            <h3 class="text-2xl font-bold mb-2 text-slate-900 dark:text-white">Khôi phục mật khẩu</h3>
-            <p class="text-sm text-slate-400 mb-8">Nhập email của bạn để nhận hướng dẫn khôi phục.</p>
-            <div class="space-y-4">
-              <div class="space-y-2">
-                <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Email</label>
-                <input type="email" id="forgot-email" placeholder="email@example.com" class="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-orange-500 transition-all outline-none text-sm font-medium">
-              </div>
-              <button id="do-forgot-btn" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-orange-100 dark:shadow-none mt-4">
-                Gửi yêu cầu
-              </button>
-              <button id="back-to-login" class="w-full py-3 text-slate-400 font-bold text-sm">Quay lại đăng nhập</button>
-            </div>
-          </div>
-          
-          <button id="close-auth-modal" class="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 transition-colors">
-            <i data-lucide="x" class="w-6 h-6"></i>
-          </button>
-        </div>
-
-        <!-- Add Category Modal -->
-        <div id="category-modal" class="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 w-full max-w-md hidden animate-in fade-in zoom-in duration-300">
-          <h3 class="text-xl font-bold mb-6 text-slate-900 dark:text-white">Quản lý danh mục & Ngân sách</h3>
-          <div id="categories-list-manage" class="space-y-3 mb-6 max-h-80 overflow-y-auto pr-2"></div>
-          
-          <div class="space-y-4 p-4 bg-orange-50/50 dark:bg-slate-800/50 rounded-3xl border border-orange-100 dark:border-slate-700">
-            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Thêm danh mục mới</label>
-            <div class="space-y-3">
-              <input type="text" id="new-category-input" placeholder="Tên danh mục..." class="w-full px-4 py-3 rounded-xl bg-white dark:bg-slate-900 outline-none border-transparent focus:border-orange-500 transition-all text-sm text-slate-900 dark:text-white shadow-sm">
-              
-              <div class="grid grid-cols-2 gap-3">
-                <div class="space-y-1">
-                  <label class="text-[9px] font-bold text-slate-400 uppercase ml-1">Biểu tượng</label>
-                  <select id="new-category-icon" class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 outline-none text-sm cursor-pointer shadow-sm">
-                    <option value="utensils">Ăn uống</option>
-                    <option value="car">Di chuyển</option>
-                    <option value="shopping-bag">Mua sắm</option>
-                    <option value="gamepad-2">Giải trí</option>
-                    <option value="home">Nhà cửa</option>
-                    <option value="banknote">Lương</option>
-                    <option value="coffee">Cà phê</option>
-                    <option value="heart">Sức khỏe</option>
-                    <option value="gift">Quà tặng</option>
-                    <option value="briefcase">Công việc</option>
-                    <option value="graduation-cap">Giáo dục</option>
-                    <option value="plane">Du lịch</option>
-                    <option value="smartphone">Điện thoại</option>
-                    <option value="plus">Khác</option>
-                  </select>
-                </div>
-                <div class="space-y-1">
-                  <label class="text-[9px] font-bold text-slate-400 uppercase ml-1">Màu sắc</label>
-                  <div class="flex items-center gap-2 bg-white dark:bg-slate-900 p-1.5 rounded-xl shadow-sm">
-                    <input type="color" id="new-category-color" value="#f97316" class="w-full h-7 rounded-lg cursor-pointer bg-transparent border-none">
-                  </div>
-                </div>
-              </div>
-              
-              <button id="save-category-btn" class="w-full bg-orange-600 text-white py-3 rounded-xl font-bold text-sm hover:bg-orange-700 transition-all shadow-lg shadow-orange-200 dark:shadow-none">Thêm danh mục</button>
-            </div>
-          </div>
-          
-          <button id="close-category-modal" class="mt-6 w-full py-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold text-sm transition-colors">Đóng</button>
-        </div>
-
-        <!-- Add Goal Modal -->
-        <div id="goal-modal" class="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 w-full max-w-md hidden animate-in fade-in zoom-in duration-300">
-          <h3 class="text-xl font-bold mb-6">Thêm mục tiêu mới</h3>
-          <div class="space-y-4">
-            <input type="text" id="goal-name" placeholder="Ví dụ: Mua iPhone 16" class="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 outline-none text-sm">
-            <input type="text" id="goal-target" placeholder="Số tiền cần tiết kiệm (VNĐ)" class="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 outline-none text-sm">
-            <input type="date" id="goal-deadline" class="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 outline-none text-sm">
-          </div>
-          <div class="flex gap-4 mt-8">
-            <button id="close-goal-modal" class="flex-1 py-3 text-slate-400 font-bold text-sm">Hủy</button>
-            <button id="save-goal-btn" class="flex-1 bg-orange-600 text-white py-3 rounded-xl font-bold text-sm">Lưu mục tiêu</button>
-          </div>
-        </div>
-
-        <!-- Contribute to Goal Modal -->
-        <div id="contribute-modal" class="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 w-full max-w-md hidden animate-in fade-in zoom-in duration-300">
-          <h3 class="text-xl font-bold mb-2">Góp vốn cho ước mơ</h3>
-          <p id="contribute-goal-name" class="text-sm text-orange-600 font-bold mb-6"></p>
-          <div class="space-y-4">
-            <div class="space-y-2">
-              <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Số tiền góp (VNĐ)</label>
-              <input type="text" id="contribute-amount" placeholder="0" class="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-orange-500 transition-all outline-none text-sm font-bold">
-            </div>
-          </div>
-          <div class="flex gap-4 mt-8">
-            <button id="close-contribute-modal" class="flex-1 py-3 text-slate-400 font-bold text-sm">Hủy</button>
-            <button id="do-contribute-btn" class="flex-1 bg-orange-600 text-white py-3 rounded-xl font-bold text-sm">Góp ngay</button>
-          </div>
-        </div>
-      </div>
 
       <!-- Footer -->
       <footer class="p-12 text-center">
@@ -519,15 +477,179 @@
           <p class="text-slate-400 text-xs font-bold uppercase tracking-[0.3em]">&copy; 2026 Chi Tiêu Pro &bull; AI Powered Finance</p>
         </div>
       </footer>
+      </div>
+    </div>
+
+    <!-- Modals (Hidden by default) -->
+    <div id="modal-overlay" class="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/80 backdrop-blur-sm z-[100] hidden items-center justify-center p-4">
+      <!-- Auth Modal -->
+      <div id="auth-modal" class="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 w-full max-w-md hidden animate-in fade-in zoom-in duration-300 shadow-2xl shadow-orange-200/30 dark:shadow-none border border-orange-50 dark:border-slate-800 relative">
+        <!-- Auth Tabs -->
+        <div class="flex p-1 bg-slate-50 dark:bg-slate-800 rounded-2xl mb-8 relative">
+          <button id="tab-login" class="flex-1 py-2.5 rounded-xl text-xs font-bold transition-all z-10 bg-white dark:bg-slate-900 shadow-sm text-orange-600">Đăng nhập</button>
+          <button id="tab-register" class="flex-1 py-2.5 rounded-xl text-xs font-bold transition-all z-10 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">Đăng ký</button>
+          <button id="tab-forgot" class="flex-1 py-2.5 rounded-xl text-xs font-bold transition-all z-10 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">Quên mật khẩu</button>
+        </div>
+
+        <div id="login-form-container" class="transition-all duration-300">
+          <h3 class="text-2xl font-bold mb-2 text-slate-900 dark:text-white">Chào mừng trở lại!</h3>
+          <p class="text-sm text-slate-400 mb-6">Đăng nhập để quản lý tài chính của bạn.</p>
+          <div class="space-y-4">
+            <div class="space-y-2">
+              <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Email</label>
+              <input type="email" id="login-email" placeholder="email@example.com" class="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-orange-500 hover:border-orange-200 dark:hover:border-slate-700 transition-all outline-none text-sm font-medium">
+            </div>
+            <div class="space-y-2">
+              <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Mật khẩu</label>
+              <input type="password" id="login-password" placeholder="••••••••" class="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-orange-500 hover:border-orange-200 dark:hover:border-slate-700 transition-all outline-none text-sm font-medium">
+            </div>
+            <button id="forgot-password-btn" class="text-xs font-bold text-orange-600 dark:text-orange-400 hover:underline block ml-auto transition-all">Quên mật khẩu?</button>
+            <button id="do-login-btn" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-orange-100 dark:shadow-none mt-4 hover:scale-[1.02] active:scale-95">
+              Đăng nhập
+            </button>
+            <p class="text-center text-sm text-slate-400 mt-6">
+              Chưa có tài khoản? <button id="switch-to-register" class="text-orange-600 dark:text-orange-400 font-bold hover:underline transition-all">Đăng ký ngay</button>
+            </p>
+          </div>
+        </div>
+
+        <div id="register-form-container" class="hidden transition-all duration-300">
+          <h3 class="text-2xl font-bold mb-2 text-slate-900 dark:text-white">Tạo tài khoản mới</h3>
+          <p class="text-sm text-slate-400 mb-6">Bắt đầu hành trình quản lý tài chính chuyên nghiệp.</p>
+          <div class="space-y-4">
+            <div class="space-y-2">
+              <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Họ và tên</label>
+              <input type="text" id="reg-name" placeholder="Nguyễn Văn A" class="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-orange-500 hover:border-orange-200 dark:hover:border-slate-700 transition-all outline-none text-sm font-medium">
+            </div>
+            <div class="space-y-2">
+              <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Email</label>
+              <input type="email" id="reg-email" placeholder="email@example.com" class="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-orange-500 hover:border-orange-200 dark:hover:border-slate-700 transition-all outline-none text-sm font-medium">
+            </div>
+            <div class="space-y-2">
+              <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Mật khẩu</label>
+              <input type="password" id="reg-password" placeholder="••••••••" class="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-orange-500 hover:border-orange-200 dark:hover:border-slate-700 transition-all outline-none text-sm font-medium">
+            </div>
+            <button id="do-register-btn" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-orange-100 dark:shadow-none mt-4 hover:scale-[1.02] active:scale-95">
+              Đăng ký
+            </button>
+            <p class="text-center text-sm text-slate-400 mt-6">
+              Đã có tài khoản? <button id="switch-to-login" class="text-orange-600 dark:text-orange-400 font-bold hover:underline transition-all">Đăng nhập</button>
+            </p>
+          </div>
+        </div>
+
+        <div id="forgot-form-container" class="hidden transition-all duration-300">
+          <h3 class="text-2xl font-bold mb-2 text-slate-900 dark:text-white">Khôi phục mật khẩu</h3>
+          <p class="text-sm text-slate-400 mb-6">Nhập email của bạn để nhận hướng dẫn khôi phục.</p>
+          <div class="space-y-4">
+            <div class="space-y-2">
+              <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Email</label>
+              <input type="email" id="forgot-email" placeholder="email@example.com" class="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-orange-500 hover:border-orange-200 dark:hover:border-slate-700 transition-all outline-none text-sm font-medium">
+            </div>
+            <button id="do-forgot-btn" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-orange-100 dark:shadow-none mt-4 hover:scale-[1.02] active:scale-95">
+              Gửi yêu cầu
+            </button>
+            <button id="back-to-login" class="w-full py-3 text-slate-400 font-bold text-sm hover:text-slate-600 dark:hover:text-slate-200 transition-all">Quay lại đăng nhập</button>
+          </div>
+        </div>
+        
+        <button id="close-auth-modal" class="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-all hover:rotate-90">
+          <i data-lucide="x" class="w-6 h-6"></i>
+        </button>
+      </div>
+
+      <!-- Add Category Modal -->
+      <div id="category-modal" class="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 w-full max-w-md hidden animate-in fade-in zoom-in duration-300 shadow-2xl shadow-orange-200/30 dark:shadow-none border border-orange-50 dark:border-slate-800">
+        <h3 class="text-xl font-bold mb-6 text-slate-900 dark:text-white">Quản lý danh mục & Ngân sách</h3>
+        <div id="categories-list-manage" class="space-y-3 mb-6 max-h-80 overflow-y-auto pr-2"></div>
+        
+        <div class="space-y-4 p-4 bg-orange-50/50 dark:bg-slate-800/50 rounded-3xl border border-orange-100 dark:border-slate-700">
+          <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Thêm danh mục mới</label>
+          <div class="space-y-3">
+            <input type="text" id="new-category-input" placeholder="Tên danh mục..." class="w-full px-4 py-3 rounded-xl bg-white dark:bg-slate-900 outline-none border-2 border-transparent focus:border-orange-500 hover:border-orange-200 dark:hover:border-slate-700 transition-all text-sm text-slate-900 dark:text-white shadow-sm">
+            
+            <div class="grid grid-cols-2 gap-3">
+              <div class="space-y-1">
+                <label class="text-[9px] font-bold text-slate-400 uppercase ml-1">Biểu tượng</label>
+                <select id="new-category-icon" class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 outline-none text-sm cursor-pointer shadow-sm border-2 border-transparent hover:border-orange-200 dark:hover:border-slate-700 transition-all">
+                  <option value="utensils">Ăn uống</option>
+                  <option value="car">Di chuyển</option>
+                  <option value="shopping-bag">Mua sắm</option>
+                  <option value="gamepad-2">Giải trí</option>
+                  <option value="home">Nhà cửa</option>
+                  <option value="banknote">Lương</option>
+                  <option value="coffee">Cà phê</option>
+                  <option value="heart">Sức khỏe</option>
+                  <option value="gift">Quà tặng</option>
+                  <option value="briefcase">Công việc</option>
+                  <option value="graduation-cap">Giáo dục</option>
+                  <option value="plane">Du lịch</option>
+                  <option value="smartphone">Điện thoại</option>
+                  <option value="plus">Khác</option>
+                </select>
+              </div>
+              <div class="space-y-1">
+                <label class="text-[9px] font-bold text-slate-400 uppercase ml-1">Màu sắc</label>
+                <div class="flex items-center gap-2 bg-white dark:bg-slate-900 p-1.5 rounded-xl shadow-sm border-2 border-transparent hover:border-orange-200 dark:hover:border-slate-700 transition-all">
+                  <input type="color" id="new-category-color" value="#f97316" class="w-full h-7 rounded-lg cursor-pointer bg-transparent border-none">
+                </div>
+              </div>
+            </div>
+            
+            <button id="save-category-btn" class="w-full bg-orange-600 text-white py-3 rounded-xl font-bold text-sm hover:bg-orange-700 transition-all shadow-lg shadow-orange-200 dark:shadow-none hover:scale-[1.02] active:scale-95">Thêm danh mục</button>
+          </div>
+        </div>
+        
+        <button id="close-category-modal" class="mt-6 w-full py-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold text-sm transition-all hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl">Đóng</button>
+      </div>
+
+      <!-- Add Goal Modal -->
+      <div id="goal-modal" class="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 w-full max-w-md hidden animate-in fade-in zoom-in duration-300 shadow-2xl shadow-orange-200/30 dark:shadow-none border border-orange-50 dark:border-slate-800">
+        <h3 class="text-xl font-bold mb-6 text-slate-900 dark:text-white">Thêm mục tiêu mới</h3>
+        <div class="space-y-4">
+          <div class="space-y-1">
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Tên mục tiêu</label>
+            <input type="text" id="goal-name" placeholder="Ví dụ: Mua iPhone 16" class="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-orange-500 hover:border-orange-200 dark:hover:border-slate-700 transition-all outline-none text-sm font-medium">
+          </div>
+          <div class="space-y-1">
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Số tiền cần tiết kiệm</label>
+            <input type="text" id="goal-target" placeholder="Số tiền cần tiết kiệm (VNĐ)" class="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-orange-500 hover:border-orange-200 dark:hover:border-slate-700 transition-all outline-none text-sm font-medium">
+          </div>
+          <div class="space-y-1">
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Hạn chót</label>
+            <input type="date" id="goal-deadline" class="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-orange-500 hover:border-orange-200 dark:hover:border-slate-700 transition-all outline-none text-sm font-medium">
+          </div>
+        </div>
+        <div class="flex gap-4 mt-8">
+          <button id="close-goal-modal" class="flex-1 py-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold text-sm transition-all hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl">Hủy</button>
+          <button id="save-goal-btn" class="flex-1 bg-orange-600 text-white py-3 rounded-xl font-bold text-sm hover:bg-orange-700 transition-all shadow-lg shadow-orange-200 dark:shadow-none hover:scale-[1.02] active:scale-95">Lưu mục tiêu</button>
+        </div>
+      </div>
+
+      <!-- Contribute to Goal Modal -->
+      <div id="contribute-modal" class="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 w-full max-w-md hidden animate-in fade-in zoom-in duration-300 shadow-2xl shadow-orange-200/30 dark:shadow-none border border-orange-50 dark:border-slate-800">
+        <h3 class="text-xl font-bold mb-2 text-slate-900 dark:text-white">Góp vốn cho ước mơ</h3>
+        <p id="contribute-goal-name" class="text-sm text-orange-600 font-bold mb-6"></p>
+        <div class="space-y-4">
+          <div class="space-y-2">
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Số tiền góp (VNĐ)</label>
+            <input type="text" id="contribute-amount" placeholder="0" class="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-orange-500 hover:border-orange-200 dark:hover:border-slate-700 transition-all outline-none text-sm font-bold">
+          </div>
+        </div>
+        <div class="flex gap-4 mt-8">
+          <button id="close-contribute-modal" class="flex-1 py-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold text-sm transition-all hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl">Hủy</button>
+          <button id="do-contribute-btn" class="flex-1 bg-orange-600 text-white py-3 rounded-xl font-bold text-sm hover:bg-orange-700 transition-all shadow-lg shadow-orange-200 dark:shadow-none hover:scale-[1.02] active:scale-95">Góp ngay</button>
+        </div>
+      </div>
     </div>
     
     <!-- Budget Modal -->
     <div id="budget-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-      <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+      <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2.5rem] shadow-2xl shadow-orange-200/30 dark:shadow-none border border-orange-50 dark:border-slate-800 overflow-hidden animate-in zoom-in-95 duration-300">
         <div class="p-8">
           <div class="flex items-center justify-between mb-8">
             <h2 class="text-2xl font-black text-slate-900 dark:text-white">Thiết lập ngân sách</h2>
-            <button id="close-budget-modal" class="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-colors">
+            <button id="close-budget-modal" class="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all hover:rotate-90">
               <i data-lucide="x" class="w-6 h-6"></i>
             </button>
           </div>
@@ -535,7 +657,7 @@
           <form id="budget-form" class="space-y-6">
             <div class="space-y-2">
               <label class="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Danh mục</label>
-              <select id="budget-category" class="w-full px-6 py-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-orange-500 focus:bg-white dark:focus:bg-slate-900 transition-all outline-none font-bold text-slate-900 dark:text-white" required>
+              <select id="budget-category" class="w-full px-6 py-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-orange-500 hover:border-orange-200 dark:hover:border-slate-700 focus:bg-white dark:focus:bg-slate-900 transition-all outline-none font-bold text-slate-900 dark:text-white cursor-pointer" required>
                 <!-- Categories will be added here -->
               </select>
             </div>
@@ -544,11 +666,11 @@
               <label class="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Số tiền tối đa</label>
               <div class="relative">
                 <span class="absolute left-6 top-1/2 -translate-y-1/2 font-black text-slate-400">₫</span>
-                <input type="text" id="budget-amount" class="w-full pl-12 pr-6 py-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-orange-500 focus:bg-white dark:focus:bg-slate-900 transition-all outline-none font-black text-2xl text-slate-900 dark:text-white" placeholder="0" required>
+                <input type="text" id="budget-amount" class="w-full pl-12 pr-6 py-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-orange-500 hover:border-orange-200 dark:hover:border-slate-700 focus:bg-white dark:focus:bg-slate-900 transition-all outline-none font-black text-2xl text-slate-900 dark:text-white" placeholder="0" required>
               </div>
             </div>
 
-            <button type="submit" class="w-full py-5 bg-orange-600 hover:bg-orange-700 text-white rounded-2xl font-black text-lg shadow-xl shadow-orange-200 dark:shadow-none transition-all hover:-translate-y-1 active:translate-y-0">
+            <button type="submit" class="w-full py-5 bg-orange-600 hover:bg-orange-700 text-white rounded-2xl font-black text-lg shadow-xl shadow-orange-200 dark:shadow-none transition-all hover:-translate-y-1 active:translate-y-0 hover:scale-[1.02]">
               Lưu ngân sách
             </button>
           </form>

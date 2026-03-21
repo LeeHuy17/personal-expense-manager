@@ -63,7 +63,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'personal_expense_manager',
         'USER': 'root',
-        'PASSWORD': 'lehuy173', # Thay bằng mật khẩu đúng của bạn
+        'PASSWORD': 'lehuy173', 
         'HOST': 'localhost',
         'PORT': '3306',
     }

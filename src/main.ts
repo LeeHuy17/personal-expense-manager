@@ -42,8 +42,11 @@ class ExpenseManager {
   private monthlyBudget: number = 10000000; // Default 10M VND
   private isDarkMode: boolean = false;
   private isIncognito: boolean = false;
+  private isLoggedIn: boolean = false;
 
   // Elements
+  private landingView: HTMLElement;
+  private dashboardView: HTMLElement;
   private balanceEl: HTMLElement;
   private incomeEl: HTMLElement;
   private expenseEl: HTMLElement;
@@ -68,6 +71,8 @@ class ExpenseManager {
   private dateTo: string = '';
 
   constructor() {
+    this.landingView = document.getElementById('landing-view')!;
+    this.dashboardView = document.getElementById('dashboard-view')!;
     this.balanceEl = document.getElementById('total-balance')!;
     this.incomeEl = document.getElementById('total-income')!;
     this.expenseEl = document.getElementById('total-expense')!;
@@ -97,6 +102,20 @@ class ExpenseManager {
     
     this.render();
     this.getAIAdvice();
+    this.isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+    this.toggleView();
+  }
+
+  private toggleView() {
+    if (this.isLoggedIn) {
+      this.landingView.classList.add('hidden');
+      this.dashboardView.classList.remove('hidden');
+      this.render();
+    } else {
+      this.landingView.classList.remove('hidden');
+      this.dashboardView.classList.add('hidden');
+    }
+    localStorage.setItem('isLoggedIn', this.isLoggedIn.toString());
   }
 
   private init() {
@@ -111,6 +130,33 @@ class ExpenseManager {
   }
 
   private setupEventListeners() {
+    // Landing Page Listeners
+    document.getElementById('get-started-btn')?.addEventListener('click', () => this.openAuthModal('register'));
+    document.getElementById('landing-login-btn')?.addEventListener('click', () => this.openAuthModal('login'));
+    document.getElementById('landing-home-btn')?.addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    document.getElementById('landing-logo')?.addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    document.getElementById('landing-features-btn')?.addEventListener('click', () => {
+      document.getElementById('features-section')?.scrollIntoView({ behavior: 'smooth' });
+    });
+
+    document.getElementById('footer-home-btn')?.addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    document.getElementById('footer-features-btn')?.addEventListener('click', () => {
+      document.getElementById('features-section')?.scrollIntoView({ behavior: 'smooth' });
+    });
+    document.getElementById('footer-login-btn')?.addEventListener('click', () => {
+      this.openAuthModal('login');
+    });
+
+    document.getElementById('learn-more-btn')?.addEventListener('click', () => {
+      document.getElementById('features-section')?.scrollIntoView({ behavior: 'smooth' });
+    });
+
     this.formEl.addEventListener('submit', (e) => {
       e.preventDefault();
       this.addTransaction();
@@ -226,12 +272,41 @@ class ExpenseManager {
     });
 
     // Auth listeners
-    document.getElementById('user-btn')?.addEventListener('click', () => this.openAuthModal());
+    document.getElementById('dropdown-login-btn')?.addEventListener('click', () => this.openAuthModal('login'));
+    document.getElementById('dropdown-register-btn')?.addEventListener('click', () => this.openAuthModal('register'));
+    document.getElementById('dropdown-logout-btn')?.addEventListener('click', () => {
+      this.isLoggedIn = false;
+      this.showToast('Đã đăng xuất', 'warning');
+      this.toggleView();
+    });
+
+    document.getElementById('dashboard-home-btn')?.addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    document.getElementById('header-home-link')?.addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    document.getElementById('dashboard-footer-home')?.addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    document.getElementById('dashboard-footer-stats')?.addEventListener('click', () => {
+      document.getElementById('stats-section')?.scrollIntoView({ behavior: 'smooth' });
+    });
+    document.getElementById('dashboard-footer-history')?.addEventListener('click', () => {
+      document.getElementById('history-section')?.scrollIntoView({ behavior: 'smooth' });
+    });
+    
     document.getElementById('close-auth-modal')?.addEventListener('click', () => this.closeModals());
     document.getElementById('switch-to-register')?.addEventListener('click', () => this.switchAuthForm('register'));
     document.getElementById('switch-to-login')?.addEventListener('click', () => this.switchAuthForm('login'));
     document.getElementById('forgot-password-btn')?.addEventListener('click', () => this.switchAuthForm('forgot'));
     document.getElementById('back-to-login')?.addEventListener('click', () => this.switchAuthForm('login'));
+
+    // Auth Tabs
+    document.getElementById('tab-login')?.addEventListener('click', () => this.switchAuthForm('login'));
+    document.getElementById('tab-register')?.addEventListener('click', () => this.switchAuthForm('register'));
+    document.getElementById('tab-forgot')?.addEventListener('click', () => this.switchAuthForm('forgot'));
 
     // Modal listeners
     const overlay = document.getElementById('modal-overlay')!;
@@ -265,16 +340,55 @@ class ExpenseManager {
 
     // Mock Auth button logic
     document.getElementById('do-login-btn')?.addEventListener('click', () => {
-      this.showToast('Đăng nhập thành công! (Dữ liệu mô phỏng)', 'warning');
+      const email = (document.getElementById('login-email') as HTMLInputElement).value;
+      const password = (document.getElementById('login-password') as HTMLInputElement).value;
+      
+      if (!email || !password) {
+        this.showToast('Vui lòng nhập đầy đủ email và mật khẩu', 'error');
+        return;
+      }
+
+      this.isLoggedIn = true;
+      this.showToast('Đăng nhập thành công!', 'success');
       this.closeModals();
+      this.toggleView();
     });
+
     document.getElementById('do-register-btn')?.addEventListener('click', () => {
-      this.showToast('Đăng ký thành công! (Dữ liệu mô phỏng)', 'warning');
+      const name = (document.getElementById('reg-name') as HTMLInputElement).value;
+      const email = (document.getElementById('reg-email') as HTMLInputElement).value;
+      const password = (document.getElementById('reg-password') as HTMLInputElement).value;
+
+      if (!name || !email || !password) {
+        this.showToast('Vui lòng điền đầy đủ thông tin', 'error');
+        return;
+      }
+
+      this.isLoggedIn = true;
+      this.showToast('Đăng ký tài khoản thành công!', 'success');
       this.closeModals();
+      this.toggleView();
+    });
+
+    // Enter key support for login/register
+    document.getElementById('login-password')?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') document.getElementById('do-login-btn')?.click();
+    });
+    document.getElementById('reg-password')?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') document.getElementById('do-register-btn')?.click();
     });
     document.getElementById('do-forgot-btn')?.addEventListener('click', () => {
       this.showToast('Yêu cầu khôi phục đã được gửi! (Dữ liệu mô phỏng)', 'warning');
       this.closeModals();
+    });
+
+    // Logout logic
+    document.querySelectorAll('[data-lucide="log-out"]').forEach(btn => {
+      btn.parentElement?.addEventListener('click', () => {
+        this.isLoggedIn = false;
+        this.showToast('Đã đăng xuất', 'warning');
+        this.toggleView();
+      });
     });
 
     // Transaction Type Toggle Logic
@@ -300,13 +414,14 @@ class ExpenseManager {
     (this as any).updateTypeToggle = updateTypeToggle;
   }
 
-  private openAuthModal() {
+  private openAuthModal(form: 'login' | 'register' | 'forgot' = 'login') {
     const overlay = document.getElementById('modal-overlay')!;
     const authModal = document.getElementById('auth-modal')!;
     overlay.classList.remove('hidden');
     overlay.classList.add('flex');
     authModal.classList.remove('hidden');
-    this.switchAuthForm('login');
+    this.switchAuthForm(form);
+    createIcons({ icons });
   }
 
   private switchAuthForm(form: 'login' | 'register' | 'forgot') {
@@ -314,13 +429,41 @@ class ExpenseManager {
     const registerForm = document.getElementById('register-form-container')!;
     const forgotForm = document.getElementById('forgot-form-container')!;
 
-    loginForm.classList.add('hidden');
-    registerForm.classList.add('hidden');
-    forgotForm.classList.add('hidden');
+    const tabLogin = document.getElementById('tab-login')!;
+    const tabRegister = document.getElementById('tab-register')!;
+    const tabForgot = document.getElementById('tab-forgot')!;
 
-    if (form === 'login') loginForm.classList.remove('hidden');
-    if (form === 'register') registerForm.classList.remove('hidden');
-    if (form === 'forgot') forgotForm.classList.remove('hidden');
+    const forms = [loginForm, registerForm, forgotForm];
+    forms.forEach(f => {
+      f.classList.add('hidden');
+      f.classList.remove('animate-in', 'fade-in', 'slide-in-from-bottom-4');
+    });
+
+    const tabs = [tabLogin, tabRegister, tabForgot];
+    tabs.forEach(t => {
+      t.className = 'flex-1 py-2.5 rounded-xl text-xs font-bold transition-all z-10 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200';
+    });
+
+    let target: HTMLElement;
+    let activeTab: HTMLElement;
+
+    if (form === 'login') {
+      target = loginForm;
+      activeTab = tabLogin;
+    } else if (form === 'register') {
+      target = registerForm;
+      activeTab = tabRegister;
+    } else {
+      target = forgotForm;
+      activeTab = tabForgot;
+    }
+
+    target.classList.remove('hidden');
+    activeTab.className = 'flex-1 py-2.5 rounded-xl text-xs font-bold transition-all z-10 bg-white dark:bg-slate-900 shadow-sm text-orange-600';
+
+    // Trigger animation
+    void (target as any).offsetWidth; 
+    target.classList.add('animate-in', 'fade-in', 'slide-in-from-bottom-4', 'duration-300');
   }
 
   private closeModals() {
@@ -617,7 +760,7 @@ class ExpenseManager {
   private populateBudgetCategorySelect() {
     const select = document.getElementById('budget-category') as HTMLSelectElement;
     if (select) {
-      select.innerHTML = this.categories.map(c => `<option value="${c}">${c}</option>`).join('');
+      select.innerHTML = this.categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
     }
   }
 

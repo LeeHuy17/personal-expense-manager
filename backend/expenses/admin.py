@@ -16,7 +16,7 @@ class LoaiAdmin(admin.ModelAdmin):
 class ThuNhapAdmin(admin.ModelAdmin):
     list_display = ('incomeId', 'user', 'soLuong', 'date')
     list_filter = ('date', 'user')
-    # search_fields = ('user__username',) # Tìm kiếm theo tên user
+    search_fields = ('user__username',) # Tìm kiếm theo tên user
 
 @admin.register(ChiPhi)
 class ChiPhiAdmin(admin.ModelAdmin):
