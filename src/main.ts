@@ -1,7 +1,22 @@
 import * as d3 from 'd3';
 import { createIcons, icons } from 'lucide';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import './index.css';
+import { GoogleGenAI } from '@google/genai';
+import { handleRegister } from './auth/register';
+
+document.addEventListener('DOMContentLoaded', () => {
+    const regForm = document.getElementById('register-form');
+    if (regForm) {
+        regForm.addEventListener('submit', handleRegister);
+    }
+});
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const genAI = new GoogleGenerativeAI(API_KEY);
+
+export const getGeminiModel = () => {
+    return genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+};
 
 interface Transaction {
   id: string;
@@ -859,7 +874,7 @@ class ExpenseManager {
           <div class="flex justify-between items-end">
             <div>
               <p class="text-sm font-bold text-slate-900 dark:text-white">${category}</p>
-              <p class="text-[10px] text-slate-400 font-medium">Đã dùng ${this.formatCurrency(spent)} / ${this.formatCurrency(amount)}</p>
+              <p class="text-[10px] font-medium text-slate-400">Đã dùng ${this.formatCurrency(spent)} / ${this.formatCurrency(amount)}</p>
             </div>
             <p class="text-xs font-black ${percent > 90 ? 'text-rose-500' : 'text-slate-900 dark:text-white'}">${Math.round((spent / amount) * 100)}%</p>
           </div>
@@ -1530,3 +1545,4 @@ declare global {
 window.addEventListener('DOMContentLoaded', () => {
   window.expenseManager = new ExpenseManager();
 });
+

@@ -21,17 +21,23 @@ INSTALLED_APPS = [
     # App của bạn
     'expenses',
     
-    # Thêm DRF để làm API cho bước tiếp theo
-    'rest_framework', 
+    # Thêm DRF để làm API 
+    'rest_framework',
+    
+    # CORS support
+    'corsheaders',
+
+    'accounts',
 ]
 
-# 4. Cấu hình Middleware (Đã sửa thứ tự để tránh lỗi admin.E408, E410)
+# 4. Cấu hình Middleware (CORS phải ở trên CsrfViewMiddleware)
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',  # 👈 PHẢI ở đầu tiên
     'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware', # Phải ở trên Auth
+    'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware', # Phải ở dưới Session
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -80,5 +86,43 @@ STATIC_URL = 'static/'
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-# 10. Khác
+# 10. Cấu hình CORS (Cho phép Frontend gọi API)
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
+]
+
+CORS_ALLOW_CREDENTIALS = True
+
+# 👇 Cho phép TẤT CẢ các nguồn (Chỉ dùng khi Code Dev)
+CORS_ALLOW_ALL_ORIGINS = True
+
+# 11. Cấu hình CSRF (Tạm thời disable cho endpoints API)
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
+]
+
+# 12. Django REST Framework Config
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',
+    ]
+}
+
+# 13. CSRF Config
+CSRF_USE_SESSIONS = False
+CSRF_COOKIE_SECURE = False
+CSRF_COOKIE_HTTPONLY = False
+
+# 13. Default fields
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+ROOT_URLCONF = 'backend.urls'
