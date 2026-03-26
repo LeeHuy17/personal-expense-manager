@@ -9,27 +9,30 @@ import { handleLogin, handleForgotPassword } from './auth/login';
 document.addEventListener('DOMContentLoaded', () => {
     const username = localStorage.getItem('username');
     const authSection = document.getElementById('auth-section');
+    
+    // 1. Tìm thẻ hiển thị câu chào
+    const greetingElement = document.getElementById('user-greeting');
 
+    // 2. Nếu đã đăng nhập, cập nhật câu chào ngay lập tức
+    if (username && greetingElement) {
+        greetingElement.textContent = `Chào ${username}!`;
+    }
+
+    // --- Các logic giữ nguyên của bạn ---
     const regForm = document.getElementById('register-form');
     const loginBtn = document.getElementById('do-login-btn');
     const forgotBtn = document.getElementById('do-forgot-btn');
     
-    if (regForm) {
-        regForm.addEventListener('submit', handleRegister);
-    }
-    
-    if (loginBtn) {
-        loginBtn.addEventListener('click', handleLogin);
-    }
-    
-    if (forgotBtn) {
-        forgotBtn.addEventListener('click', handleForgotPassword);
-    }
+    if (regForm) regForm.addEventListener('submit', handleRegister);
+    if (loginBtn) loginBtn.addEventListener('click', handleLogin);
+    if (forgotBtn) forgotBtn.addEventListener('click', handleForgotPassword);
 
+    // 3. Xử lý vùng Auth Section (Ẩn hiện nút Login/Logout)
     if (username && authSection) {
         authSection.innerHTML = `
-            <span>Chào, <strong>${username}</strong></span>
-            <button id="logout-btn" class="btn-logout">Đăng xuất</button>
+            <button id="dropdown-logout-btn" class="w-full text-left px-4 py-2 text-sm font-medium text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition-colors flex items-center gap-2">
+                  <i data-lucide="log-out" class="w-4 h-4"></i> Đăng xuất
+            </button>
         `;
 
         document.getElementById('logout-btn')?.addEventListener('click', () => {
@@ -44,6 +47,7 @@ const genAI = new GoogleGenerativeAI(API_KEY);
 export const getGeminiModel = () => {
     return genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 };
+
 
 interface Transaction {
   id: string;
