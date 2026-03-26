@@ -38,26 +38,37 @@ export const handleLogin = async (e: Event) => {
 
         if (response.ok) {
             const data = await response.json();
-            localStorage.setItem('accessToken', data.access);
+
+            // 1. Lưu thông tin quan trọng vào LocalStorage
+            // Lưu ý: data.access là token (nếu dùng JWT), data.username là tên hiển thị
+            localStorage.setItem('accessToken', data.access || ''); 
+            localStorage.setItem('username', data.username);
             localStorage.setItem('isLoggedIn', 'true');
             
-            showToast('✅ Đăng nhập thành công!', 'success');
+            // 2. Thông báo cho người dùng (Dùng Toast sẽ chuyên nghiệp hơn alert)
+            showToast(`✅ Đăng nhập thành công! Chào ${data.username}`, 'success');
             
-            // Ẩn Modal và hiện Dashboard
+            // 3. Xử lý giao diện: Ẩn Modal ngay lập tức để người dùng thấy Dashboard bên dưới
             const modal = document.getElementById('modal-overlay');
             if (modal) {
                 modal.classList.add('hidden');
                 modal.classList.remove('flex');
             }
             
-            // Làm mới trang để dashboard load đúng
+            // 4. Làm mới trang sau một khoảng nghỉ ngắn để Toast kịp hiển thị
+            // Việc reload giúp các Component khác (như Header) cập nhật lại tên người dùng
             setTimeout(() => {
                 window.location.reload();
-            }, 500);
+            }, 1000);
+
         } else {
+            // Xử lý khi đăng nhập thất bại
             const errorData = await response.json();
             console.error('Login error:', errorData);
-            showToast('❌ Email hoặc mật khẩu không đúng', 'error');
+            
+            // Hiển thị lỗi cụ thể từ server nếu có, không thì hiện lỗi mặc định
+            const msg = errorData.error || '❌ Email hoặc mật khẩu không đúng';
+            showToast(msg, 'error');
         }
     } catch (error) {
         console.error('❌ Lỗi kết nối:', error);

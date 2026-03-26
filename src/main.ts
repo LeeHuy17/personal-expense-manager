@@ -7,6 +7,9 @@ import { handleRegister } from './auth/register';
 import { handleLogin, handleForgotPassword } from './auth/login';
 
 document.addEventListener('DOMContentLoaded', () => {
+    const username = localStorage.getItem('username');
+    const authSection = document.getElementById('auth-section');
+
     const regForm = document.getElementById('register-form');
     const loginBtn = document.getElementById('do-login-btn');
     const forgotBtn = document.getElementById('do-forgot-btn');
@@ -21,6 +24,18 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (forgotBtn) {
         forgotBtn.addEventListener('click', handleForgotPassword);
+    }
+
+    if (username && authSection) {
+        authSection.innerHTML = `
+            <span>Chào, <strong>${username}</strong></span>
+            <button id="logout-btn" class="btn-logout">Đăng xuất</button>
+        `;
+
+        document.getElementById('logout-btn')?.addEventListener('click', () => {
+            localStorage.clear();
+            window.location.reload();
+        });
     }
 });
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
