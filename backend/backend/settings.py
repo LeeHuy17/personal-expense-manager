@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     
     # Thêm DRF để làm API 
     'rest_framework',
+    'rest_framework.authtoken',  # ✅ Support cho Token authentication
     
     # CORS support
     'corsheaders',

@@ -1,14 +1,10 @@
 import { showToast } from '../utils/toast';
-import { checkAuthentication } from '../main';
-import { ExpenseManager } from '../ExpenseManager';
-
-const manager = new ExpenseManager();
 
 /**
  * Xử lý sự kiện đăng nhập
  * Flow: Đăng nhập thành công -> Lưu token -> Mở Dashboard -> Đóng Modal
  */
-const handleLogin = async (e: Event) => {
+export const handleLogin = async (e: Event) => {
     e.preventDefault(); // Chặn load lại trang
 
     // Lấy giá trị từ input
@@ -20,7 +16,7 @@ const handleLogin = async (e: Event) => {
 
     // Validation cơ bản
     if (!email || !password) {
-        showToast('Vui lòng điền email và mật khẩu', 'error');
+        showToast('😕 Vui lòng điền email và mật khẩu', 'error');
         return;
     }
 
@@ -28,7 +24,7 @@ const handleLogin = async (e: Event) => {
     const submitBtn = document.getElementById('do-login-btn') as HTMLButtonElement;
     const originalText = submitBtn.textContent;
     submitBtn.disabled = true;
-    submitBtn.textContent = 'Đang xử lý...';
+    submitBtn.textContent = '⏳ Đang xử lý...';
 
     try {
         const response = await fetch('http://127.0.0.1:8000/api/accounts/login/', {
@@ -43,29 +39,40 @@ const handleLogin = async (e: Event) => {
         if (response.ok) {
             const data = await response.json();
             localStorage.setItem('accessToken', data.access);
+            localStorage.setItem('isLoggedIn', 'true');
             
-            // Đăng nhập xong là Load dữ liệu ngay!
-            await manager.loadData(); 
-
-            // Sau đó mới ẩn Modal và hiện Dashboard
-            document.getElementById('modal-overlay')?.classList.add('hidden');
-            document.getElementById('main-dashboard')?.classList.remove('hidden');
-        }
-            } catch (error) {
-                console.error('Lỗi kết nối:', error);
-                showToast('Không thể kết nối tới server. Vui lòng thử lại sau!', 'error');
-            } finally {
-                // Khôi phục button
-                submitBtn.disabled = false;
-                submitBtn.textContent = originalText;
+            showToast('✅ Đăng nhập thành công!', 'success');
+            
+            // Ẩn Modal và hiện Dashboard
+            const modal = document.getElementById('modal-overlay');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
             }
-        };
+            
+            // Làm mới trang để dashboard load đúng
+            setTimeout(() => {
+                window.location.reload();
+            }, 500);
+        } else {
+            const errorData = await response.json();
+            console.error('Login error:', errorData);
+            showToast('❌ Email hoặc mật khẩu không đúng', 'error');
+        }
+    } catch (error) {
+        console.error('❌ Lỗi kết nối:', error);
+        showToast('❌ Không thể kết nối tới server. Vui lòng thử lại sau!', 'error');
+    } finally {
+        // Khôi phục button
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalText;
+    }
+};
 
 /**
  * Xử lý sự kiện "Quên mật khẩu"
- * (Optional - có thể bỏ nếu chưa implement)
  */
-const handleForgotPassword = async (e: Event) => {
+export const handleForgotPassword = async (e: Event) => {
     e.preventDefault();
 
     const emailInput = document.getElementById('forgot-email') as HTMLInputElement;
@@ -89,20 +96,17 @@ const handleForgotPassword = async (e: Event) => {
         });
 
         if (response.ok) {
-            showToast('Email khôi phục mật khẩu đã được gửi. Kiểm tra hộp thư của bạn!', 'success');
+            showToast('✅ Email khôi phục mật khẩu đã được gửi. Kiểm tra hộp thư!', 'success');
             emailInput.value = '';
         } else {
             const errorData = await response.json();
-            showToast('Email không được tìm thấy', 'error');
+            showToast('❌ Email không được tìm thấy', 'error');
         }
     } catch (error) {
         console.error('Lỗi kết nối:', error);
-        showToast('Không thể kết nối tới server', 'error');
+        showToast('❌ Không thể kết nối tới server', 'error');
     } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = originalText;
     }
 };
-
-// Export
-export { handleLogin, handleForgotPassword };

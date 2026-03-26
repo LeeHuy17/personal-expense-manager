@@ -1,4 +1,5 @@
 import { showToast } from '../utils/toast';
+import { showLoginTab } from './ui-logic';
 
 export const handleRegister = async (e: Event) => {
     e.preventDefault(); // 🔒 Dòng này cực kỳ quan trọng - Chặn reload trang mặc định!
@@ -33,20 +34,24 @@ export const handleRegister = async (e: Event) => {
         console.log("✅ Response từ Django:", data);
 
         if (response.ok) {
-            showToast('Đăng ký thành công!', 'success');
-            alert("✅ Đăng ký thành công! Dữ liệu đã vào MySQL.");
+            showToast('✅ Đăng ký thành công! Vui lòng đăng nhập', 'success');
             console.log("Dữ liệu server trả về:", data);
-            // Chuyển tab hoặc xóa form tại đây
+            
+            // 🔥 FIX: Xóa dữ liệu form sau khi đăng ký thành công
+            nameInput.value = '';
+            emailInput.value = '';
+            passwordInput.value = '';
+            
+            // 🔥 FIX: Chuyển sang tab Login thay vì chỉ hiện alert
+            showLoginTab();
         } else {
             console.error("❌ Lỗi từ Django:", data);
             const errorMsg = data.username?.[0] || data.email?.[0] || data.password?.[0] || 'Lỗi đăng ký';
-            showToast(`Lỗi: ${errorMsg}`, 'error');
-            alert("❌ Lỗi: " + JSON.stringify(data));
+            showToast(`❌ Lỗi: ${errorMsg}`, 'error');
         }
     } catch (error) {
         console.error("❌ Lỗi kết nối API:", error);
-        showToast('Không thể kết nối Backend', 'error');
-        alert("❌ Không thể kết nối Backend: " + (error instanceof Error ? error.message : 'Unknown error'));
+        showToast('❌ Không thể kết nối Backend', 'error');
     } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = 'Đăng ký';

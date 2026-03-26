@@ -4,11 +4,23 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import './index.css';
 import { GoogleGenAI } from '@google/genai';
 import { handleRegister } from './auth/register';
+import { handleLogin, handleForgotPassword } from './auth/login';
 
 document.addEventListener('DOMContentLoaded', () => {
     const regForm = document.getElementById('register-form');
+    const loginBtn = document.getElementById('do-login-btn');
+    const forgotBtn = document.getElementById('do-forgot-btn');
+    
     if (regForm) {
         regForm.addEventListener('submit', handleRegister);
+    }
+    
+    if (loginBtn) {
+        loginBtn.addEventListener('click', handleLogin);
+    }
+    
+    if (forgotBtn) {
+        forgotBtn.addEventListener('click', handleForgotPassword);
     }
 });
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
@@ -353,48 +365,21 @@ class ExpenseManager {
     document.getElementById('do-contribute-btn')?.addEventListener('click', () => this.contributeToGoal());
     document.getElementById('close-contribute-modal')?.addEventListener('click', () => this.closeModals());
 
-    // Mock Auth button logic
-    document.getElementById('do-login-btn')?.addEventListener('click', () => {
-      const email = (document.getElementById('login-email') as HTMLInputElement).value;
-      const password = (document.getElementById('login-password') as HTMLInputElement).value;
-      
-      if (!email || !password) {
-        this.showToast('Vui lòng nhập đầy đủ email và mật khẩu', 'error');
-        return;
-      }
-
-      this.isLoggedIn = true;
-      this.showToast('Đăng nhập thành công!', 'success');
-      this.closeModals();
-      this.toggleView();
-    });
-
-    document.getElementById('do-register-btn')?.addEventListener('click', () => {
-      const name = (document.getElementById('reg-name') as HTMLInputElement).value;
-      const email = (document.getElementById('reg-email') as HTMLInputElement).value;
-      const password = (document.getElementById('reg-password') as HTMLInputElement).value;
-
-      if (!name || !email || !password) {
-        this.showToast('Vui lòng điền đầy đủ thông tin', 'error');
-        return;
-      }
-
-      this.isLoggedIn = true;
-      this.showToast('Đăng ký tài khoản thành công!', 'success');
-      this.closeModals();
-      this.toggleView();
-    });
-
+    // Auth button logic - real API calls are handled in auth/login.ts and auth/register.ts
+    // These listeners are set up in DOMContentLoaded at the top of main.ts
+    
     // Enter key support for login/register
     document.getElementById('login-password')?.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') document.getElementById('do-login-btn')?.click();
+      if (e.key === 'Enter') {
+        const event = new Event('click');
+        document.getElementById('do-login-btn')?.dispatchEvent(event);
+      }
     });
     document.getElementById('reg-password')?.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') document.getElementById('do-register-btn')?.click();
-    });
-    document.getElementById('do-forgot-btn')?.addEventListener('click', () => {
-      this.showToast('Yêu cầu khôi phục đã được gửi! (Dữ liệu mô phỏng)', 'warning');
-      this.closeModals();
+      if (e.key === 'Enter') {
+        const event = new Event('submit');
+        document.getElementById('register-form')?.dispatchEvent(event);
+      }
     });
 
     // Logout logic
