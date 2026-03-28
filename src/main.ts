@@ -4,9 +4,62 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import './index.css';
 import { GoogleGenAI } from '@google/genai';
 import { handleRegister } from './auth/register';
-import { handleLogin, handleForgotPassword } from './auth/login';
+import { handleLogin, handleForgotPassword, handleResetPasswordClick } from './auth/login';
+import { initResetPasswordPage, setupResetPasswordListeners } from './auth/reset-password';
+import { showForgotTab, showLoginTab, showResetTab } from './auth/ui-logic';
 
 document.addEventListener('DOMContentLoaded', () => {
+    console.log("✅ DOMContentLoaded fired");
+    
+    // Khởi tạo trang reset password nếu cần
+    initResetPasswordPage();
+    setupResetPasswordListeners();
+    
+    // ==============================================
+    // 🔐 BẮTLINK RESET PASSWORD
+    // ==============================================
+    const path = window.location.pathname;
+    console.log("🌐 Current path:", path);
+    
+    if (path.startsWith('/reset-password/')) {
+        console.log("🔑 Phát hiện link reset password!");
+        
+        const segments = path.split('/').filter(Boolean); // Lọc các phần trống
+        // segments: ['reset-password', 'uid', 'token']
+        const uid = segments[1];
+        const token = segments[2];
+
+        console.log("📋 Parsed UID:", uid);
+        console.log("📋 Parsed Token:", token);
+
+        if (uid && token) {
+            // 1. Hiện Modal (nếu đang ẩn)
+            const modalOverlay = document.getElementById('modal-overlay');
+            modalOverlay?.classList.remove('hidden');
+            modalOverlay?.classList.add('flex');
+            console.log("✅ Modal opened");
+
+            // 2. Gọi showResetTab() để xử lý tất cả logic: ẩn tab, hiện reset form, điền uid/token
+            showResetTab();
+            
+            // 3. Điền uid/token vào thẻ ẩn để dùng khi gửi API
+            const uidInput = document.getElementById('reset-uid') as HTMLInputElement;
+            const tokenInput = document.getElementById('reset-token') as HTMLInputElement;
+            if (uidInput) uidInput.value = uid;
+            if (tokenInput) tokenInput.value = token;
+            console.log("✅ UID/Token values set");
+
+            // 4. Cập nhật thông báo trạng thái
+            const statusInfo = document.getElementById('reset-status-info');
+            if (statusInfo) {
+                statusInfo.textContent = "✅ Link xác nhận hợp lệ. Vui lòng nhập mật khẩu mới";
+            }
+
+            console.log("✅ Đã nhận diện Link Reset. UID:", uid, "Token:", token);
+        }
+    }
+    // ==============================================
+    
     const username = localStorage.getItem('username');
     const authSection = document.getElementById('auth-section');
     
@@ -22,10 +75,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const regForm = document.getElementById('register-form');
     const loginBtn = document.getElementById('do-login-btn');
     const forgotBtn = document.getElementById('do-forgot-btn');
+    const forgotPasswordBtn = document.getElementById('forgot-password-btn');
+    const backToLoginBtn = document.getElementById('back-to-login');
     
-    if (regForm) regForm.addEventListener('submit', handleRegister);
-    if (loginBtn) loginBtn.addEventListener('click', handleLogin);
-    if (forgotBtn) forgotBtn.addEventListener('click', handleForgotPassword);
+    console.log("🔍 Elements found:", { regForm, loginBtn, forgotBtn, forgotPasswordBtn, backToLoginBtn });
+    
+    if (regForm) {
+        regForm.addEventListener('submit', handleRegister);
+        console.log("✔️ Register form listener added");
+    }
+    if (loginBtn) {
+        loginBtn.addEventListener('click', handleLogin);
+        console.log("✔️ Login button listener added");
+    }
+    if (forgotBtn) {
+        forgotBtn.addEventListener('click', handleForgotPassword);
+        console.log("✔️ Forgot button listener added");
+    }
+    if (forgotPasswordBtn) {
+        forgotPasswordBtn.addEventListener('click', showForgotTab);
+        console.log("✔️ Forgot password link listener added");
+    }
+    if (backToLoginBtn) {
+        backToLoginBtn.addEventListener('click', showLoginTab);
+        console.log("✔️ Back to login button listener added");
+    }
 
     // 3. Xử lý vùng Auth Section (Ẩn hiện nút Login/Logout)
     if (username && authSection) {
@@ -40,7 +114,44 @@ document.addEventListener('DOMContentLoaded', () => {
             window.location.reload();
         });
     }
+
+    // 4. Global click listener for debugging
+    document.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        if (target.id === 'do-forgot-btn') {
+            console.log("🎯 do-forgot-btn clicked via global listener");
+        }
+    });
 });
+
+// Export global functions for onclick handlers
+(window as any).handleLoginClick = (e: Event) => {
+    console.log("🌍 Global handleLoginClick called");
+    handleLogin(e);
+};
+
+(window as any).handleForgotPasswordClick = (e: Event) => {
+    console.log("🌍 Global handleForgotPasswordClick called");
+    handleForgotPassword(e);
+};
+
+(window as any).handleResetPasswordClick = (e: Event) => {
+    console.log("🌍 Global handleResetPasswordClick called");
+    handleResetPasswordClick(e);
+};
+
+(window as any).showForgotTabClick = (e: Event) => {
+    console.log("🌍 Global showForgotTabClick called");
+    e.preventDefault();
+    showForgotTab();
+};
+
+(window as any).showLoginTabClick = (e: Event) => {
+    console.log("🌍 Global showLoginTabClick called");
+    e.preventDefault();
+    showLoginTab();
+};
+
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 const genAI = new GoogleGenerativeAI(API_KEY);
 
@@ -162,6 +273,24 @@ class ExpenseManager {
       this.dashboardView.classList.add('hidden');
     }
     localStorage.setItem('isLoggedIn', this.isLoggedIn.toString());
+    this.updateDropdownButtons();
+  }
+
+  private updateDropdownButtons() {
+    const loggedOutButtons = document.getElementById('logged-out-buttons');
+    const logoutBtn = document.getElementById('dropdown-logout-btn');
+
+    if (loggedOutButtons && logoutBtn) {
+      if (this.isLoggedIn) {
+        // Khi đã đăng nhập: ẩn Login/Register, chỉ hiện Logout
+        loggedOutButtons.classList.add('hidden');
+        logoutBtn.classList.remove('hidden');
+      } else {
+        // Khi chưa đăng nhập: hiện Login/Register, ẩn Logout
+        loggedOutButtons.classList.remove('hidden');
+        logoutBtn.classList.add('hidden');
+      }
+    }
   }
 
   private init() {

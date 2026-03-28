@@ -1,8 +1,27 @@
 import os
 from pathlib import Path
+import environ
+
+
 
 # 1. Cấu hình đường dẫn gốc
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+env = environ.Env()
+# Đọc file .env.local
+environ.Env.read_env(os.path.join(BASE_DIR, '.env.local'))
+
+# Cấu hình Email SMTP (Dùng chung cho cả Dev và Prod để test thật)
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+
+# Đọc từ file .env.local
+EMAIL_HOST_USER = env('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL')
+
 
 # 2. Bảo mật & Chế độ Debug
 SECRET_KEY = 'django-insecure-dev-key'
@@ -100,6 +119,29 @@ CORS_ALLOW_CREDENTIALS = True
 # 👇 Cho phép TẤT CẢ các nguồn (Chỉ dùng khi Code Dev)
 CORS_ALLOW_ALL_ORIGINS = True
 
+# Cho phép các methods
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+# Cho phép headers
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
 # 11. Cấu hình CSRF (Tạm thời disable cho endpoints API)
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
@@ -115,7 +157,10 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
-    ]
+    ],
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+    ],
 }
 
 # 13. CSRF Config
@@ -123,7 +168,7 @@ CSRF_USE_SESSIONS = False
 CSRF_COOKIE_SECURE = False
 CSRF_COOKIE_HTTPONLY = False
 
-# 13. Default fields
+# 14. Default fields
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 ROOT_URLCONF = 'backend.urls'

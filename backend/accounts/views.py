@@ -5,6 +5,13 @@ from rest_framework.permissions import AllowAny
 from rest_framework.authtoken.models import Token
 from .serializers import RegisterSerializer 
 from django.contrib.auth.models import User
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes, force_str
+from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
+from django.utils.html import strip_tags
+from django.conf import settings
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
@@ -72,3 +79,114 @@ class LoginView(APIView):
         response_data["access"] = token.key
         
         return Response(response_data, status=status.HTTP_200_OK)
+
+class ForgotPasswordView(APIView):
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        email = request.data.get('email')
+        if not email:
+            return Response({"error": "Vui lòng nhập email"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            user = User.objects.get(email=email)
+            token = default_token_generator.make_token(user)
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            
+            # Link trỏ về Frontend cổng 3000
+            reset_link = f"http://localhost:3000/reset-password/{uid}/{token}/"
+            
+            # --- PHẦN GỬI EMAIL HTML THẬT ---
+            subject = 'Khôi phục mật khẩu - Personal Expense Manager'
+            html_content = f"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e1e1e1; border-radius: 10px;">
+                    <h2 style="color: #ea580c; text-align: center;">Yêu cầu đặt lại mật khẩu</h2>
+                    <p>Chào <strong>{user.username}</strong>,</p>
+                    <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Vui lòng nhấn vào nút bên dưới để tiến hành:</p>
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="{reset_link}" style="background-color: #ea580c; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Đặt lại mật khẩu</a>
+                    </div>
+                    <p style="font-size: 13px; color: #666;">Link này sẽ hết hạn sau 24 giờ. Nếu bạn không yêu cầu điều này, hãy bỏ qua email này.</p>
+                    <hr style="border: none; border-top: 1px solid #eee;">
+                    <p style="font-size: 12px; color: #999; text-align: center;">Đội ngũ JQKA - Personal Expense Manager</p>
+                </div>
+            """
+            text_content = strip_tags(html_content) # Bản dự phòng nếu mail client không hỗ trợ HTML
+
+            # Gửi mail dùng EmailMultiAlternatives (cho phép gửi HTML)
+            msg = EmailMultiAlternatives(
+                subject, 
+                text_content, 
+                settings.DEFAULT_FROM_EMAIL, 
+                [email]
+            )
+            msg.attach_alternative(html_content, "text/html")
+            msg.send()
+
+            return Response({"message": "Email khôi phục đã được gửi thành công!"}, status=status.HTTP_200_OK)
+            
+        except User.DoesNotExist:
+            # Bảo mật: Trả về 200 để tránh bị dò quét email tồn tại
+            return Response({"message": "Nếu email tồn tại trong hệ thống, bạn sẽ nhận được link khôi phục."}, status=status.HTTP_200_OK)
+        except Exception as e:
+            print(f"❌ Lỗi gửi mail: {e}")
+            return Response({"error": "Lỗi server khi gửi mail"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class ResetPasswordView(APIView):
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        """
+        API để đặt lại mật khẩu mới
+        Cần các tham số: uid, token, new_password, confirm_password
+        """
+        uid = request.data.get('uid')
+        token = request.data.get('token')
+        new_password = request.data.get('new_password')
+        confirm_password = request.data.get('confirm_password')
+        
+        # Validation cơ bản
+        if not all([uid, token, new_password, confirm_password]):
+            return Response({
+                "error": "Thiếu thông tin: uid, token, new_password, confirm_password"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Kiểm tra mật khẩu trùng khớp
+        if new_password != confirm_password:
+            return Response({
+                "error": "Mật khẩu mới và xác nhận mật khẩu không trùng khớp"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Kiểm tra độ dài mật khẩu (tối thiểu 6 ký tự)
+        if len(new_password) < 6:
+            return Response({
+                "error": "Mật khẩu phải có ít nhất 6 ký tự"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Giải mã uid để lấy user id
+            user_id = force_str(urlsafe_base64_decode(uid))
+            user = User.objects.get(pk=user_id)
+            
+            # Kiểm tra token có hợp lệ không
+            if not default_token_generator.check_token(user, token):
+                return Response({
+                    "error": "Token không hợp lệ hoặc đã hết hạn"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Đặt mật khẩu mới
+            user.set_password(new_password)
+            user.save()
+            
+            print(f"✅ Mật khẩu đã được đặt lại cho user: {user.username}")
+            
+            return Response({
+                "message": "Mật khẩu đã được đặt lại thành công",
+                "username": user.username,
+                "email": user.email
+            }, status=status.HTTP_200_OK)
+            
+        except (TypeError, ValueError, User.DoesNotExist):
+            return Response({
+                "error": "Không thể xác nhận người dùng"
+            }, status=status.HTTP_400_BAD_REQUEST)
