@@ -29,3 +29,17 @@ export function showToast(message: string, type: 'success' | 'error' | 'warning'
     setTimeout(() => toast.remove(), 300);
   }, 5000);
 }
+
+/**
+ * 🧹 Clear all active toasts (useful when switching tabs)
+ */
+export function clearToasts() {
+  const container = document.getElementById('toast-container');
+  if (container) {
+    const toasts = container.querySelectorAll('div');
+    toasts.forEach(toast => {
+      toast.classList.add('animate-out', 'fade-out', 'slide-out-to-right-full');
+      setTimeout(() => toast.remove(), 300);
+    });
+  }
+}

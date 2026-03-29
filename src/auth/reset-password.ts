@@ -1,4 +1,5 @@
 import { showToast } from '../utils/toast';
+import { stopPollingResetStatus } from './login';
 
 /**
  * Xử lý sự kiện đặt lại mật khẩu
@@ -140,9 +141,12 @@ export const handleResetPassword = async (e: Event) => {
             const data = await response.json();
             console.log('✅ Phản hồi từ server:', data);
             
+            // Stop polling since reset is successful
+            stopPollingResetStatus();
+            
             showToast(`✅ ${data.message || 'Mật khẩu đã được cập nhật!'}. Đang chuyển hướng đến đăng nhập...`, 'success');
             
-            // Chuyển hướng về trang login sau 2 giây
+            // Redirect to login after 2 seconds
             setTimeout(() => {
                 window.location.href = '/';
             }, 2000);

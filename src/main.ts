@@ -701,7 +701,15 @@ class ExpenseManager {
       document.getElementById('history-section')?.scrollIntoView({ behavior: 'smooth' });
     });
     
-    document.getElementById('close-auth-modal')?.addEventListener('click', () => this.closeModals());
+    document.getElementById('close-auth-modal')?.addEventListener('click', () => {
+      // Nếu đang trong form reset password, reload trang
+      const resetForm = document.getElementById('reset-form-container');
+      if (resetForm && !resetForm.classList.contains('hidden')) {
+        location.reload();
+      } else {
+        this.closeModals();
+      }
+    });
     document.getElementById('switch-to-register')?.addEventListener('click', () => this.switchAuthForm('register'));
     document.getElementById('switch-to-login')?.addEventListener('click', () => this.switchAuthForm('login'));
     document.getElementById('forgot-password-btn')?.addEventListener('click', () => this.switchAuthForm('forgot'));
@@ -734,7 +742,15 @@ class ExpenseManager {
     document.getElementById('close-category-modal')?.addEventListener('click', () => this.closeModals());
     document.getElementById('close-goal-modal')?.addEventListener('click', () => this.closeModals());
     overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) this.closeModals();
+      if (e.target === overlay) {
+        // Nếu đang trong form reset password, reload trang
+        const resetForm = document.getElementById('reset-form-container');
+        if (resetForm && !resetForm.classList.contains('hidden')) {
+          location.reload();
+        } else {
+          this.closeModals();
+        }
+      }
     });
 
     document.getElementById('save-category-btn')?.addEventListener('click', () => this.addCategory());
@@ -844,6 +860,13 @@ class ExpenseManager {
   }
 
   private closeModals() {
+    // Nếu đang trong form reset password, reload trang thay vì ẩn modal
+    const resetForm = document.getElementById('reset-form-container');
+    if (resetForm && !resetForm.classList.contains('hidden')) {
+      location.reload();
+      return;
+    }
+    
     const overlay = document.getElementById('modal-overlay')!;
     overlay.classList.add('hidden');
     overlay.classList.remove('flex');

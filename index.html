@@ -485,7 +485,7 @@
     <!-- Modals (Hidden by default) -->
     <div id="modal-overlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4">
       <!-- Auth Modal -->
-      <div id="auth-modal" class="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 w-full max-w-md animate-in fade-in zoom-in duration-300 shadow-2xl shadow-orange-200/30 dark:shadow-none border border-orange-50 dark:border-slate-800 relative">
+      <div id="auth-modal" class="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 w-full max-w-lg animate-in fade-in zoom-in duration-300 shadow-2xl shadow-orange-200/30 dark:shadow-none border border-orange-50 dark:border-slate-800 relative overflow-y-auto">
         <!-- Auth Tabs -->
         <div id="auth-tabs-container" class="flex p-1 bg-slate-50 dark:bg-slate-800 rounded-2xl mb-8 relative">
           <button id="tab-login" class="flex-1 py-2.5 rounded-xl text-xs font-bold transition-all z-10 bg-white dark:bg-slate-900 shadow-sm text-orange-600">Đăng nhập</button>
@@ -555,32 +555,42 @@
           </div>
         </div>
 
-        <div id="reset-form-container" class="hidden transition-all duration-300">
-          <h3 class="text-2xl font-bold mb-2 text-slate-900 dark:text-white">Đặt lại mật khẩu mới</h3>
-          <p class="text-sm text-slate-400 mb-6">Nhập mật khẩu mới để hoàn tất quá trình khôi phục.</p>
-          
-          <!-- Hidden inputs để lưu uid và token -->
-          <input type="hidden" id="reset-uid">
-          <input type="hidden" id="reset-token">
-          
-          <div class="space-y-4">
-            <div class="space-y-2">
-              <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Mật khẩu mới</label>
-              <input type="password" id="reset-password" placeholder="••••••••" class="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-orange-500 hover:border-orange-200 dark:hover:border-slate-700 transition-all outline-none text-sm font-medium">
-            </div>
-            <div class="space-y-2">
-              <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Xác nhận mật khẩu</label>
-              <input type="password" id="reset-password-confirm" placeholder="••••••••" class="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-orange-500 hover:border-orange-200 dark:hover:border-slate-700 transition-all outline-none text-sm font-medium">
-            </div>
-            <div class="text-sm text-slate-400">
-              <p id="reset-status-info" class="text-xs mb-2">✅ Link xác nhận hợp lệ. Vui lòng nhập mật khẩu mới.</p>
-            </div>
-            <button type="button" id="do-reset-btn" onclick="window.handleResetPasswordClick(event)" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-orange-100 dark:shadow-none mt-4 hover:scale-[1.02] active:scale-95">
-              Đặt lại mật khẩu
-            </button>
-            <button type="button" id="reset-back-btn" onclick="window.location.href = '/'" class="w-full py-3 text-slate-400 font-bold text-sm hover:text-slate-600 dark:hover:text-slate-200 transition-all">Quay lại trang chủ</button>
-          </div>
-        </div>
+        <div id="reset-form-container" class="hidden transition-all duration-300 w-full flex-col items-stretch text-left" style="display: none;">
+  
+  <div class="mb-6 block">
+    <h3 class="text-2xl font-bold mb-2 text-slate-900 dark:text-white">Đặt lại mật khẩu</h3>
+    <p class="text-sm text-slate-400 leading-relaxed">Nhập mật khẩu mới để hoàn tất quá trình khôi phục tài khoản.</p>
+  </div>
+
+  <input type="hidden" id="reset-uid">
+  <input type="hidden" id="reset-token">
+
+  <div class="space-y-4 flex flex-col w-full">
+    <div class="space-y-2">
+      <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Mật khẩu mới</label>
+      <input type="password" id="reset-password" placeholder="••••••••" 
+        class="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-orange-500 transition-all outline-none text-sm font-medium">
+    </div>
+
+    <div class="space-y-2">
+      <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Xác nhận mật khẩu</label>
+      <input type="password" id="reset-password-confirm" placeholder="••••••••" 
+        class="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-orange-500 transition-all outline-none text-sm font-medium">
+    </div>
+
+    <div class="pt-2 flex flex-col space-y-3">
+      <button type="button" id="do-reset-btn" onclick="window.handleResetPasswordClick(event)" 
+        class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-orange-100 dark:shadow-none hover:scale-[1.02] active:scale-95">
+        Xác nhận đặt lại
+      </button>
+      
+      <button type="button" id="reset-back-btn" onclick="location.reload()" 
+        class="w-full py-3 text-slate-400 font-bold text-sm hover:text-slate-600 dark:hover:text-slate-200 transition-all text-center">
+        Quay lại đăng nhập
+      </button>
+    </div>
+  </div>
+</div>
         
         <button id="close-auth-modal" class="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-all hover:rotate-90">
           <i data-lucide="x" class="w-6 h-6"></i>
