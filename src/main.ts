@@ -1,7 +1,280 @@
 import * as d3 from 'd3';
 import { createIcons, icons } from 'lucide';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import './index.css';
+import { GoogleGenAI } from '@google/genai';
+import { handleRegister } from './auth/register';
+import { handleLogin, handleForgotPassword, handleResetPasswordClick } from './auth/login';
+import { initResetPasswordPage, setupResetPasswordListeners } from './auth/reset-password';
+import { showForgotTab, showLoginTab, showResetTab } from './auth/ui-logic';
+
+// ============================================
+// GLOBAL AUTH UI INITIALIZATION
+// ============================================
+// This function MUST run BEFORE ExpenseManager is created
+// to ensure landing/dashboard views are properly set up
+
+function initAuthUI() {
+    console.log("🔐 [GLOBAL] initAuthUI() called");
+    
+    const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+    const landing = document.getElementById('landing-view');
+    const dashboard = document.getElementById('dashboard-view');
+
+    console.log("🔐 [GLOBAL] Auth state:", {
+        isLoggedIn,
+        landing_exists: !!landing,
+        dashboard_exists: !!dashboard
+    });
+
+    if (isLoggedIn && landing && dashboard) {
+        console.log("✅ [GLOBAL] User is logged in - Hiding landing, showing dashboard");
+        // Force hide landing page - use setProperty with 'important' for maximum strength
+        landing.style.setProperty('display', 'none', 'important');
+        landing.style.setProperty('visibility', 'hidden', 'important');
+        landing.classList.add('hidden');
+        
+        // Force show dashboard
+        dashboard.style.setProperty('display', 'flex', 'important');
+        dashboard.style.setProperty('visibility', 'visible', 'important');
+        dashboard.classList.remove('hidden');
+        
+        console.log("✅ Dashboard display set to flex, Landing set to none");
+    } else {
+        console.log("📍 [GLOBAL] User is NOT logged in - Showing landing, hiding dashboard");
+        if (landing) {
+            landing.style.setProperty('display', 'flex', 'important');
+            landing.style.setProperty('visibility', 'visible', 'important');
+            landing.classList.remove('hidden');
+            console.log("✅ Landing display set to flex");
+        }
+        if (dashboard) {
+            dashboard.style.setProperty('display', 'none', 'important');
+            dashboard.style.setProperty('visibility', 'hidden', 'important');
+            dashboard.classList.add('hidden');
+            console.log("✅ Dashboard display set to none");
+        }
+    }
+}
+
+// Make it global so it can be called from anywhere
+(window as any).initAuthUI = initAuthUI;
+
+// ============================================
+// GLOBAL NAVBAR UPDATE FUNCTION
+// ============================================
+// Updates visibility of login/logout buttons and user greeting
+
+function updateNavbar(): void {
+    console.log("🔘 [GLOBAL] updateNavbar() called");
+    
+    const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+    const loggedOutButtons = document.getElementById('logged-out-buttons');
+    const logoutBtn = document.getElementById('dropdown-logout-btn');
+    const userGreeting = document.getElementById('user-greeting');
+    const username = localStorage.getItem('username');
+
+    console.log("🔘 [GLOBAL] Navbar state:", {
+        isLoggedIn,
+        username,
+        loggedOutButtons_exists: !!loggedOutButtons,
+        logoutBtn_exists: !!logoutBtn,
+        userGreeting_exists: !!userGreeting
+    });
+
+    if (isLoggedIn) {
+        console.log("✅ [GLOBAL] User is logged in - Hiding login buttons, showing logout");
+        // Hide login/register buttons
+        if (loggedOutButtons) {
+            loggedOutButtons.style.setProperty('display', 'none', 'important');
+            loggedOutButtons.classList.add('hidden');
+        }
+        
+        // Show logout button
+        if (logoutBtn) {
+            logoutBtn.style.setProperty('display', 'flex', 'important');
+            logoutBtn.classList.remove('hidden');
+        }
+        
+        // Update greeting
+        if (userGreeting && username) {
+            userGreeting.textContent = `Chào ${username}!`;
+            console.log(`✅ [GLOBAL] User greeting updated to: Chào ${username}!`);
+        }
+    } else {
+        console.log("📍 [GLOBAL] User is NOT logged in - Showing login buttons, hiding logout");
+        // Show login/register buttons
+        if (loggedOutButtons) {
+            loggedOutButtons.style.setProperty('display', 'flex', 'important');
+            loggedOutButtons.classList.remove('hidden');
+        }
+        
+        // Hide logout button
+        if (logoutBtn) {
+            logoutBtn.style.setProperty('display', 'none', 'important');
+            logoutBtn.classList.add('hidden');
+        }
+        
+        // Reset greeting
+        if (userGreeting) {
+            userGreeting.textContent = 'Chào user!';
+            console.log("✅ [GLOBAL] User greeting reset to: Chào user!");
+        }
+    }
+}
+
+// Make it global so it can be called from anywhere
+(window as any).updateNavbar = updateNavbar;
+
+document.addEventListener('DOMContentLoaded', () => {
+    console.log("✅ DOMContentLoaded fired");
+    
+    // CRITICAL: Initialize auth UI FIRST, before anything else
+    console.log("🔐 Running initAuthUI() to set correct view...");
+    initAuthUI();
+    
+    // Update navbar buttons immediately
+    console.log("🔘 Running updateNavbar() to set correct navbar state...");
+    updateNavbar();
+    
+    // Khởi tạo trang reset password nếu cần
+    initResetPasswordPage();
+    setupResetPasswordListeners();
+    
+    // ==============================================
+    // 🔐 BẮTLINK RESET PASSWORD
+    // ==============================================
+    const path = window.location.pathname;
+    console.log("🌐 Current path:", path);
+    
+    if (path.startsWith('/reset-password/')) {
+        console.log("🔑 Phát hiện link reset password!");
+        
+        const segments = path.split('/').filter(Boolean); // Lọc các phần trống
+        // segments: ['reset-password', 'uid', 'token']
+        const uid = segments[1];
+        const token = segments[2];
+
+        console.log("📋 Parsed UID:", uid);
+        console.log("📋 Parsed Token:", token);
+
+        if (uid && token) {
+            // 1. Hiện Modal (nếu đang ẩn)
+            const modalOverlay = document.getElementById('modal-overlay');
+            modalOverlay?.classList.remove('hidden');
+            modalOverlay?.classList.add('flex');
+            console.log("✅ Modal opened");
+
+            // 2. Gọi showResetTab() để xử lý tất cả logic: ẩn tab, hiện reset form, điền uid/token
+            showResetTab();
+            
+            // 3. Điền uid/token vào thẻ ẩn để dùng khi gửi API
+            const uidInput = document.getElementById('reset-uid') as HTMLInputElement;
+            const tokenInput = document.getElementById('reset-token') as HTMLInputElement;
+            if (uidInput) uidInput.value = uid;
+            if (tokenInput) tokenInput.value = token;
+            console.log("✅ UID/Token values set");
+
+            // 4. Cập nhật thông báo trạng thái
+            const statusInfo = document.getElementById('reset-status-info');
+            if (statusInfo) {
+                statusInfo.textContent = "✅ Link xác nhận hợp lệ. Vui lòng nhập mật khẩu mới";
+            }
+
+            console.log("✅ Đã nhận diện Link Reset. UID:", uid, "Token:", token);
+        }
+    }
+    // ==============================================
+    
+    const username = localStorage.getItem('username');
+    const authSection = document.getElementById('auth-section');
+    
+    // 1. Tìm thẻ hiển thị câu chào
+    const greetingElement = document.getElementById('user-greeting');
+
+    // 2. Nếu đã đăng nhập, cập nhật câu chào ngay lập tức
+    if (username && greetingElement) {
+        greetingElement.textContent = `Chào ${username}!`;
+    }
+
+    // --- Các logic giữ nguyên của bạn ---
+    const regForm = document.getElementById('register-form');
+    const loginBtn = document.getElementById('do-login-btn');
+    const forgotBtn = document.getElementById('do-forgot-btn');
+    const forgotPasswordBtn = document.getElementById('forgot-password-btn');
+    const backToLoginBtn = document.getElementById('back-to-login');
+    
+    console.log("🔍 Elements found:", { regForm, loginBtn, forgotBtn, forgotPasswordBtn, backToLoginBtn });
+    
+    if (regForm) {
+        regForm.addEventListener('submit', handleRegister);
+        console.log("✔️ Register form listener added");
+    }
+    if (loginBtn) {
+        loginBtn.addEventListener('click', handleLogin);
+        console.log("✔️ Login button listener added");
+    }
+    if (forgotBtn) {
+        forgotBtn.addEventListener('click', handleForgotPassword);
+        console.log("✔️ Forgot button listener added");
+    }
+    if (forgotPasswordBtn) {
+        forgotPasswordBtn.addEventListener('click', showForgotTab);
+        console.log("✔️ Forgot password link listener added");
+    }
+    if (backToLoginBtn) {
+        backToLoginBtn.addEventListener('click', showLoginTab);
+        console.log("✔️ Back to login button listener added");
+    }
+
+    // 3. Auth Section will be handled by ExpenseManager.updateDropdownButtons()
+    // No need to set up logout here - it will be managed by ExpenseManager
+    // This avoids duplicate event listeners
+
+    // 4. Global click listener for debugging
+    document.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        if (target.id === 'do-forgot-btn') {
+            console.log("🎯 do-forgot-btn clicked via global listener");
+        }
+    });
+});
+
+// Export global functions for onclick handlers
+(window as any).handleLoginClick = (e: Event) => {
+    console.log("🌍 Global handleLoginClick called");
+    handleLogin(e);
+};
+
+(window as any).handleForgotPasswordClick = (e: Event) => {
+    console.log("🌍 Global handleForgotPasswordClick called");
+    handleForgotPassword(e);
+};
+
+(window as any).handleResetPasswordClick = (e: Event) => {
+    console.log("🌍 Global handleResetPasswordClick called");
+    handleResetPasswordClick(e);
+};
+
+(window as any).showForgotTabClick = (e: Event) => {
+    console.log("🌍 Global showForgotTabClick called");
+    e.preventDefault();
+    showForgotTab();
+};
+
+(window as any).showLoginTabClick = (e: Event) => {
+    console.log("🌍 Global showLoginTabClick called");
+    e.preventDefault();
+    showLoginTab();
+};
+
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const genAI = new GoogleGenerativeAI(API_KEY);
+
+export const getGeminiModel = () => {
+    return genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+};
+
 
 interface Transaction {
   id: string;
@@ -96,26 +369,157 @@ class ExpenseManager {
     this.setupEventListeners();
     this.setupBudgetEvents();
     
+    // Check login state
+    this.isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+    console.log("🔍 ExpenseManager Constructor: isLoggedIn =", this.isLoggedIn);
+    
     if (this.transactions.length === 0) {
       this.addMockData();
     }
     
+    // Render and update UI
     this.render();
     this.getAIAdvice();
-    this.isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
     this.toggleView();
+    
+    // Update navbar buttons (Login/Register/Logout)
+    console.log("🔘 Calling updateNavbar() from constructor...");
+    (window as any).updateNavbar();
+    
+    // Final verification
+    setTimeout(() => {
+      this.verifyUIState();
+    }, 100);
   }
 
+  // CRITICAL: Initialize Auth UI State immediately
   private toggleView() {
+    console.log("🔄 toggleView() called - isLoggedIn:", this.isLoggedIn);
+    
     if (this.isLoggedIn) {
+      console.log("✅ Showing Dashboard");
+      // Hide landing view using strong CSS override
       this.landingView.classList.add('hidden');
+      this.landingView.style.setProperty('display', 'none', 'important');
+      this.landingView.style.setProperty('visibility', 'hidden', 'important');
+      
+      // Show dashboard view using strong CSS override
       this.dashboardView.classList.remove('hidden');
+      this.dashboardView.style.setProperty('display', 'flex', 'important');
+      this.dashboardView.style.setProperty('visibility', 'visible', 'important');
+      
+      // CRITICAL: Ensure modal is closed when showing dashboard
+      const modalOverlay = document.getElementById('modal-overlay');
+      if (modalOverlay) {
+        modalOverlay.classList.add('hidden');
+        modalOverlay.classList.remove('flex');
+        console.log("✅ Modal closed");
+      }
+      
       this.render();
+      
+      // Verify the change happened
+      this.verifyUIState();
     } else {
+      console.log("📍 Showing Landing Page");
+      // Show landing view using strong CSS override
       this.landingView.classList.remove('hidden');
+      this.landingView.style.setProperty('display', 'flex', 'important');
+      this.landingView.style.setProperty('visibility', 'visible', 'important');
+      
+      // Hide dashboard view using strong CSS override
       this.dashboardView.classList.add('hidden');
+      this.dashboardView.style.setProperty('display', 'none', 'important');
+      this.dashboardView.style.setProperty('visibility', 'hidden', 'important');
+      
+      // Verify the change happened
+      this.verifyUIState();
     }
     localStorage.setItem('isLoggedIn', this.isLoggedIn.toString());
+    this.updateDropdownButtons();
+  }
+  
+  // CRITICAL: Verify UI state and fix if needed
+  private verifyUIState() {
+    const landingDisplay = window.getComputedStyle(this.landingView).display;
+    const dashboardDisplay = window.getComputedStyle(this.dashboardView).display;
+    
+    console.log("🔍 UI State Verification:", {
+      isLoggedIn: this.isLoggedIn,
+      landingView_display: landingDisplay,
+      landingView_hasHidden: this.landingView.classList.contains('hidden'),
+      dashboardView_display: dashboardDisplay,
+      dashboardView_hasHidden: this.dashboardView.classList.contains('hidden'),
+    });
+    
+    // Emergency fix if something went wrong
+    if (this.isLoggedIn) {
+      if (landingDisplay !== 'none') {
+        console.warn("⚠️  Emergency fix: Landing view still visible! Forcing hidden...");
+        this.landingView.style.display = 'none';
+        this.landingView.style.visibility = 'hidden';
+      }
+      if (dashboardDisplay === 'none') {
+        console.warn("⚠️  Emergency fix: Dashboard view not visible! Forcing display...");
+        this.dashboardView.style.display = 'flex';
+        this.dashboardView.style.visibility = 'visible';
+      }
+    }
+  }
+
+  private updateDropdownButtons() {
+    const loggedOutButtons = document.getElementById('logged-out-buttons');
+    const logoutBtn = document.getElementById('dropdown-logout-btn');
+    
+    console.log("🔘 updateDropdownButtons - isLoggedIn:", this.isLoggedIn);
+    console.log("🔘 Elements found -", { loggedOutButtons: !!loggedOutButtons, logoutBtn: !!logoutBtn });
+
+    if (loggedOutButtons && logoutBtn) {
+      if (this.isLoggedIn) {
+        console.log("✅ Hiding login buttons, showing logout");
+        // Khi đã đăng nhập: ẩn Login/Register, chỉ hiện Logout
+        loggedOutButtons.classList.add('hidden');
+        logoutBtn.classList.remove('hidden');
+        
+        // Re-attach logout listener to be sure
+        logoutBtn.removeEventListener('click', this.handleLogoutClick);
+        logoutBtn.addEventListener('click', this.handleLogoutClick);
+      } else {
+        console.log("📍 Showing login buttons, hiding logout");
+        // Khi chưa đăng nhập: hiện Login/Register, ẩn Logout
+        loggedOutButtons.classList.remove('hidden');
+        logoutBtn.classList.add('hidden');
+      }
+    } else {
+      console.warn("⚠️  Auth buttons not found:", { loggedOutButtons: !!loggedOutButtons, logoutBtn: !!logoutBtn });
+    }
+  }
+  
+  private handleLogoutClick = () => {
+      console.log('🔐 Logout button clicked');
+      
+      // 1. Clear all session data FIRST - before any reload
+      localStorage.clear();
+      sessionStorage.clear();
+      console.log("✅ LocalStorage and SessionStorage cleared");
+      
+      // 2. Show logout notification
+      this.showToast('Đã đăng xuất', 'warning');
+      console.log("🔔 Logout toast shown");
+      
+      // 3. Small delay to let toast render, then perform hard page reload
+      setTimeout(() => {
+          console.log("🔄 Performing hard page reload by navigating to root...");
+          
+          // Navigate to root with cache-busting parameter
+          // This reloads the page with empty localStorage, which triggers initAuthUI()
+          // to show landing page in DOMContentLoaded handler
+          const reloadUrl = window.location.origin + '/?logout=' + Date.now();
+          console.log("🔄 Redirect URL:", reloadUrl);
+          
+          window.location.href = reloadUrl;
+          
+      }, 300);
   }
 
   private init() {
@@ -338,48 +742,21 @@ class ExpenseManager {
     document.getElementById('do-contribute-btn')?.addEventListener('click', () => this.contributeToGoal());
     document.getElementById('close-contribute-modal')?.addEventListener('click', () => this.closeModals());
 
-    // Mock Auth button logic
-    document.getElementById('do-login-btn')?.addEventListener('click', () => {
-      const email = (document.getElementById('login-email') as HTMLInputElement).value;
-      const password = (document.getElementById('login-password') as HTMLInputElement).value;
-      
-      if (!email || !password) {
-        this.showToast('Vui lòng nhập đầy đủ email và mật khẩu', 'error');
-        return;
-      }
-
-      this.isLoggedIn = true;
-      this.showToast('Đăng nhập thành công!', 'success');
-      this.closeModals();
-      this.toggleView();
-    });
-
-    document.getElementById('do-register-btn')?.addEventListener('click', () => {
-      const name = (document.getElementById('reg-name') as HTMLInputElement).value;
-      const email = (document.getElementById('reg-email') as HTMLInputElement).value;
-      const password = (document.getElementById('reg-password') as HTMLInputElement).value;
-
-      if (!name || !email || !password) {
-        this.showToast('Vui lòng điền đầy đủ thông tin', 'error');
-        return;
-      }
-
-      this.isLoggedIn = true;
-      this.showToast('Đăng ký tài khoản thành công!', 'success');
-      this.closeModals();
-      this.toggleView();
-    });
-
+    // Auth button logic - real API calls are handled in auth/login.ts and auth/register.ts
+    // Logout listener is handled by updateDropdownButtons() to avoid duplicates
+    
     // Enter key support for login/register
     document.getElementById('login-password')?.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') document.getElementById('do-login-btn')?.click();
+      if (e.key === 'Enter') {
+        const event = new Event('click');
+        document.getElementById('do-login-btn')?.dispatchEvent(event);
+      }
     });
     document.getElementById('reg-password')?.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') document.getElementById('do-register-btn')?.click();
-    });
-    document.getElementById('do-forgot-btn')?.addEventListener('click', () => {
-      this.showToast('Yêu cầu khôi phục đã được gửi! (Dữ liệu mô phỏng)', 'warning');
-      this.closeModals();
+      if (e.key === 'Enter') {
+        const event = new Event('submit');
+        document.getElementById('register-form')?.dispatchEvent(event);
+      }
     });
 
     // Logout logic
@@ -859,7 +1236,7 @@ class ExpenseManager {
           <div class="flex justify-between items-end">
             <div>
               <p class="text-sm font-bold text-slate-900 dark:text-white">${category}</p>
-              <p class="text-[10px] text-slate-400 font-medium">Đã dùng ${this.formatCurrency(spent)} / ${this.formatCurrency(amount)}</p>
+              <p class="text-[10px] font-medium text-slate-400">Đã dùng ${this.formatCurrency(spent)} / ${this.formatCurrency(amount)}</p>
             </div>
             <p class="text-xs font-black ${percent > 90 ? 'text-rose-500' : 'text-slate-900 dark:text-white'}">${Math.round((spent / amount) * 100)}%</p>
           </div>
@@ -1527,6 +1904,9 @@ declare global {
   }
 }
 
+// Consolidate: Create ExpenseManager after all setup
 window.addEventListener('DOMContentLoaded', () => {
+  console.log("✅ Creating ExpenseManager instance...");
   window.expenseManager = new ExpenseManager();
 });
+
