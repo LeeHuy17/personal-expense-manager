@@ -13,9 +13,24 @@ export class ExpenseManager {
     private apiUrl = 'http://127.0.0.1:8000/api/expenses/'; // URL API Django của bạn
 
     constructor() {
-        // Có thể khởi tạo các element UI ở đây nếu cần
+        this.toggleView();
     }
 
+    // 1. hàm để điều khiển ẩn/hiện các phần giao diện
+    private toggleView(): void {
+        const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+        const landingPage = document.getElementById('landing-page'); // ID của trang giới thiệu
+        const dashboardPage = document.getElementById('dashboard-page'); // ID của trang quản lý
+
+        if (isLoggedIn && dashboardPage && landingPage) {
+            landingPage.classList.add('hidden');
+            dashboardPage.classList.remove('hidden');
+            this.loadData(); // Chỉ load dữ liệu khi đã xác định là Dashboard
+        } else if (landingPage && dashboardPage) {
+            landingPage.classList.remove('hidden');
+            dashboardPage.classList.add('hidden');
+        }
+    }
     /**
      * PHƯƠNG THỨC PUBLIC: Tải dữ liệu từ Backend
      * Đổi từ private thành public để file login.ts có thể gọi sau khi đăng nhập

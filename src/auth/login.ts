@@ -53,6 +53,12 @@ export const handleLogin = async (e: Event) => {
             localStorage.setItem('username', data.username);
             localStorage.setItem('isLoggedIn', 'true');
             
+            console.log("✅ LocalStorage updated:", {
+                accessToken: !!data.access,
+                username: data.username,
+                isLoggedIn: localStorage.getItem('isLoggedIn')
+            });
+            
             // 2. Thông báo cho người dùng
             showToast(`✅ Đăng nhập thành công! Chào ${data.username}`, 'success');
             
@@ -61,12 +67,38 @@ export const handleLogin = async (e: Event) => {
             if (modal) {
                 modal.classList.add('hidden');
                 modal.classList.remove('flex');
+                console.log("✅ Modal closed");
             }
             
-            // 4. Làm mới trang
+            // 4. Chuyển hướng về trang chủ để load Dashboard view
             setTimeout(() => {
-                window.location.reload();
-            }, 1000);
+                console.log("🌐 Redirecting to /");
+                console.log("📦 Final localStorage before redirect:", {
+                    isLoggedIn: localStorage.getItem('isLoggedIn'),
+                    username: localStorage.getItem('username'),
+                    accessToken: !!localStorage.getItem('accessToken')
+                });
+                
+                // Re-initialize auth UI to show dashboard
+                if ((window as any).initAuthUI) {
+                    console.log("🔐 Re-initializing auth UI after login...");
+                    (window as any).initAuthUI();
+                }
+                
+                // Update navbar immediately
+                if ((window as any).updateNavbar) {
+                    console.log("🔘 Updating navbar after login...");
+                    (window as any).updateNavbar();
+                }
+                
+                // Force browser to NOT use cache - add timestamp to URL
+                // This ensures complete reload of the page and ExpenseManager initialization
+                const redirectUrl = window.location.origin + '?v=' + Date.now();
+                console.log("🔄 Force reload with URL:", redirectUrl);
+                
+                // Use location.href with cache-busting parameter
+                window.location.href = redirectUrl;
+            }, 800);
 
         } else {
             // Xử lý khi đăng nhập thất bại
