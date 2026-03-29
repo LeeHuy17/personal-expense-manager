@@ -119,6 +119,137 @@ export const handleLogin = async (e: Event) => {
 };
 
 /**
+ * 🔄 REAL-TIME SYNC: Polling function để lắng nghe khi user click email link
+ * Frontend sẽ check mỗi 3 giây xem reset request đã ready chưa
+ * Khi user click email link → Backend set is_ready_to_reset = true → Frontend detect → Show reset form ON CURRENT PAGE
+ */
+let pollingInterval: ReturnType<typeof setInterval> | null = null;
+
+export const startPollingResetStatus = (email: string) => {
+    console.log("🔄 [POLLING] Bắt đầu polling để check reset status...");
+    
+    // Show waiting message
+    const statusEl = document.getElementById('reset-status-info');
+    if (statusEl) {
+        statusEl.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 10px; color: #ea580c;">
+                <span style="animation: spin 1s linear infinite; display: inline-block;">⏳</span>
+                <span>Đang chờ xác nhận từ email... (mở email và click link để tiếp tục)</span>
+            </div>
+        `;
+    }
+    
+    // Start polling every 3 seconds
+    let pollCount = 0;
+    let toastShown = false; // Flag to ensure toast shows only once
+    const maxPolls = 480; // 480 * 3s = 24 minutes timeout
+    
+    pollingInterval = setInterval(async () => {
+        pollCount++;
+        console.log(`🔄 [POLLING] Lần ${pollCount} - Checking reset status...`);
+        
+        try {
+            const response = await fetch(`http://127.0.0.1:8000/api/accounts/check-reset-status/?email=${encodeURIComponent(email)}`);
+            const data = await response.json();
+            
+            console.log("✅ [POLLING] Response:", data);
+            
+            // Check nếu user đã click email link
+            if (data.is_ready_to_reset && data.token && data.uid) {
+                console.log("🎉 [POLLING] User đã click link! Mark as ready.");
+                clearInterval(pollingInterval!);
+                pollingInterval = null;
+                
+                // Show reset form with uid/token
+                showResetForm(data.uid, data.token);
+                if (!toastShown) {
+                    showToast("✅ " + data.message, "success");
+                    toastShown = true;
+                }
+                return;
+            }
+            
+            // Check nếu token hết hạn
+            if (data.error === 'expired') {
+                console.log("❌ [POLLING] Token đã hết hạn");
+                clearInterval(pollingInterval!);
+                pollingInterval = null;
+                showToast(data.message, "error");
+                return;
+            }
+            
+            // Timeout sau 24 phút
+            if (pollCount >= maxPolls) {
+                console.log("❌ [POLLING] Timeout - bỏ polling");
+                clearInterval(pollingInterval!);
+                pollingInterval = null;
+                showToast("⏱️ Hết thời gian chờ. Vui lòng gửi lại yêu cầu.", "error");
+                return;
+            }
+            
+        } catch (error) {
+            console.error("❌ [POLLING] Lỗi khi polling:", error);
+        }
+    }, 3000); // Poll every 3 seconds
+};
+
+/**
+ * Stop polling nếu user cancel hoặc timeout
+ */
+export const stopPollingResetStatus = () => {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+        console.log("🛑 [POLLING] Dừng polling");
+    }
+};
+
+/**
+ * Helper: Show reset form với uid/token
+ */
+const showResetForm = (uid: string, token: string) => {
+    // Import hàm showResetTab từ ui-logic
+    try {
+        const showResetTab = (window as any).showResetTab;
+        if (showResetTab) {
+            showResetTab();
+        }
+    } catch (e) {
+        console.log("showResetTab không tìm thấy, làm cách khác");
+    }
+    
+    // Set UID và Token
+    (document.getElementById('reset-uid') as HTMLInputElement).value = uid;
+    (document.getElementById('reset-token') as HTMLInputElement).value = token;
+    
+    // Show reset form directly
+    const resetForm = document.getElementById('reset-form-container');
+    if (resetForm) {
+        resetForm.classList.remove('hidden');
+        resetForm.style.setProperty('display', 'flex', 'important');
+    }
+    
+    // Hide other forms
+    const loginForm = document.getElementById('login-form-container');
+    const registerForm = document.getElementById('register-form-container');
+    const forgotForm = document.getElementById('forgot-form-container');
+    const authTabsContainer = document.getElementById('auth-tabs-container');
+    
+    if (loginForm) loginForm.classList.add('hidden');
+    if (registerForm) registerForm.classList.add('hidden');
+    if (forgotForm) forgotForm.classList.add('hidden');
+    if (authTabsContainer) authTabsContainer.classList.add('hidden');
+    
+    // Update status message
+    const statusEl = document.getElementById('reset-status-info');
+    if (statusEl) {
+        statusEl.textContent = "✅ Link xác nhận thành công! Vui lòng nhập mật khẩu mới.";
+        statusEl.style.color = "#10b981";
+        statusEl.style.setProperty('display', 'block', 'important');
+    }
+};
+
+/**
  * Xử lý sự kiện "Quên mật khẩu"
  */
 export const handleForgotPassword = async (e: Event) => {
@@ -161,6 +292,10 @@ export const handleForgotPassword = async (e: Event) => {
         
         if (response.ok) {
             showToast("✅ Đã gửi email khôi phục! Vui lòng kiểm tra inbox", "success");
+            
+            // 🔄 START POLLING - Lắng nghe khi user click email link
+            console.log("🔄 Bắt đầu polling để detect khi user click email...");
+            startPollingResetStatus(email);
         } else {
             showToast(data.error || "Có lỗi xảy ra", "error");
         }
