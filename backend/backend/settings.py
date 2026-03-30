@@ -1,15 +1,24 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
-# 1. Cấu hình đường dẫn gốc
+# 📌 Load .env
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(os.path.join(BASE_DIR, '.env'))
 
-# 2. Bảo mật & Chế độ Debug
+# 📌 Gemini API Key
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# ===============================
+# ⚙️ CẤU HÌNH CHUNG
+# ===============================
 SECRET_KEY = 'django-insecure-dev-key'
 DEBUG = True
 ALLOWED_HOSTS = ['*']
 
-# 3. Định nghĩa các App
+# ===============================
+# 📦 APPS
+# ===============================
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -17,34 +26,41 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
-    # App của bạn
+
+    'rest_framework',
     'expenses',
-    
-    # Thêm DRF để làm API cho bước tiếp theo
-    'rest_framework', 
+    "corsheaders",
 ]
 
-# 4. Cấu hình Middleware (Đã sửa thứ tự để tránh lỗi admin.E408, E410)
+# ===============================
+# 🔐 MIDDLEWARE
+# ===============================
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware', # Phải ở trên Auth
+    'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware', # Phải ở dưới Session
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "corsheaders.middleware.CorsMiddleware",  # 👈 thêm CORS middleware
+    
 ]
+CORS_ALLOW_ALL_ORIGINS = True  # 👈 tạm thời cho phép tất cả, sau này nên cấu hình cụ thể hơn
 
-# 5. Cấu hình URL & WSGI
+# ===============================
+# 🔗 URL
+# ===============================
 ROOT_URLCONF = 'backend.urls'
 WSGI_APPLICATION = 'backend.wsgi.application'
 
-# 6. Cấu hình Templates (Đã sửa để tránh lỗi admin.E403)
+# ===============================
+# 🎨 TEMPLATE
+# ===============================
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],  # 👈 thêm nếu có HTML
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -57,28 +73,40 @@ TEMPLATES = [
     },
 ]
 
-# 7. Cấu hình Cơ sở dữ liệu MySQL (Theo Schema )
+# ===============================
+# 🛢️ DATABASE
+# ===============================
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'personal_expense_manager',
         'USER': 'root',
-        'PASSWORD': 'lehuy173', 
+        'PASSWORD': 'lehuy173',
         'HOST': 'localhost',
         'PORT': '3306',
     }
 }
 
-# 8. Cấu hình Ngôn ngữ & Múi giờ
+# ===============================
+# 🌍 TIMEZONE
+# ===============================
 LANGUAGE_CODE = 'vi-vn'
 TIME_ZONE = 'Asia/Ho_Chi_Minh'
 USE_I18N = True
 USE_TZ = True
 
-# 9. Cấu hình Tệp tĩnh (Static files)
+# ===============================
+# 📁 STATIC FILES (FIX WARNING)
+# ===============================
 STATIC_URL = 'static/'
-STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'static')  # ⚠️ phải tạo folder này
+]
+
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-# 10. Khác
+# ===============================
+# 🔧 DEFAULT
+# ===============================
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
