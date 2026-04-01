@@ -1,6 +1,7 @@
 import * as d3 from 'd3';
 import { createIcons, icons } from 'lucide';
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import axios from 'axios';
 import './index.css';
 import { GoogleGenAI } from '@google/genai';
 import { handleRegister } from './auth/register';
@@ -355,13 +356,13 @@ class ExpenseManager {
     this.trendChartContainer = document.getElementById('trend-chart-container')!;
     this.searchInput = document.getElementById('search-input') as HTMLInputElement;
     this.filterCategory = document.getElementById('filter-category') as HTMLSelectElement;
-    this.budgetProgress = document.getElementById('budget-progress')!;
-    this.budgetPercent = document.getElementById('budget-percent')!;
-    this.budgetWarning = document.getElementById('budget-warning')!;
+    this.budgetProgress = document.getElementById('budget-progress') || ({} as HTMLElement);
+    this.budgetPercent = document.getElementById('budget-percent') || ({} as HTMLElement);
+    this.budgetWarning = document.getElementById('budget-warning') || ({} as HTMLElement);
     this.goalsList = document.getElementById('goals-list')!;
     this.aiAdviceContainer = document.getElementById('ai-advice-container')!;
     this.budgetListEl = document.getElementById('budget-list')!;
-    this.budgetModal = document.getElementById('budget-modal')!;
+    this.budgetModal = document.getElementById('budget-modal') || ({} as HTMLElement);
     this.budgetForm = document.getElementById('budget-form') as HTMLFormElement;
 
     this.loadData();
@@ -373,12 +374,12 @@ class ExpenseManager {
     this.isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
     console.log("🔍 ExpenseManager Constructor: isLoggedIn =", this.isLoggedIn);
     
-    if (this.transactions.length === 0) {
+    if (this.transactions.length === 0 && !this.isLoggedIn) {
       this.addMockData();
     }
     
-    // Render and update UI
-    this.render();
+    // Load real data and render UI
+    this.loadAndRender();
     this.getAIAdvice();
     this.toggleView();
     
@@ -501,7 +502,8 @@ class ExpenseManager {
       // 1. Clear all session data FIRST - before any reload
       localStorage.clear();
       sessionStorage.clear();
-      console.log("✅ LocalStorage and SessionStorage cleared");
+      this.transactions = []; // Clear local transactions array
+      console.log("✅ LocalStorage, SessionStorage và transactions array cleared");
       
       // 2. Show logout notification
       this.showToast('Đã đăng xuất', 'warning');
@@ -545,6 +547,17 @@ class ExpenseManager {
     });
     document.getElementById('landing-features-btn')?.addEventListener('click', () => {
       document.getElementById('features-section')?.scrollIntoView({ behavior: 'smooth' });
+    });
+
+    document.getElementById('landing-add-transaction-btn')?.addEventListener('click', () => {
+      const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+      if (isLoggedIn) {
+        // If logged in, scroll to the add transaction section
+        document.getElementById('add-transaction-section')?.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        // If not logged in, open the auth modal
+        this.openAuthModal('login');
+      }
     });
 
     document.getElementById('footer-home-btn')?.addEventListener('click', () => {
@@ -800,8 +813,14 @@ class ExpenseManager {
       }
     };
 
-    typeExpenseBtn.addEventListener('click', () => updateTypeToggle('expense'));
-    typeIncomeBtn.addEventListener('click', () => updateTypeToggle('income'));
+    typeExpenseBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      updateTypeToggle('expense');
+    });
+    typeIncomeBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      updateTypeToggle('income');
+    });
     
     // Store update function for use in addTransaction
     (this as any).updateTypeToggle = updateTypeToggle;
@@ -890,6 +909,66 @@ class ExpenseManager {
     const icon = document.getElementById('incognito-icon')!;
     icon.setAttribute('data-lucide', this.isIncognito ? 'eye-off' : 'eye');
     createIcons({ icons });
+  }
+
+  // 📥 Fetch real data from API (returns transactions array)
+  private async fetchTransactions(): Promise<Transaction[]> {
+    const token = localStorage.getItem('accessToken');
+    const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+
+    // If not logged in, return empty array
+    if (!isLoggedIn || !token) {
+      console.log('📍 Not logged in - returning empty transactions');
+      return [];
+    }
+
+    const headers = {
+      'Authorization': `Token ${token}`,
+      'Content-Type': 'application/json'
+    };
+
+    try {
+      console.log('🔄 Fetching real data from API...');
+
+      // Fetch both APIs in parallel for better performance
+      const [incomeRes, expenseRes] = await Promise.all([
+        axios.get('http://127.0.0.1:8000/api/incomes/', { headers }),
+        axios.get('http://127.0.0.1:8000/api/expenses/', { headers })
+      ]);
+
+      // Map income data
+      const mappedIncomes: Transaction[] = incomeRes.data.map((item: any) => ({
+        id: item.id?.toString() || Math.random().toString(),
+        description: item.description || 'Thu nhập',
+        amount: parseFloat(item.amount),
+        type: 'income' as const,
+        category: item.category || item.loai || 'Khác',
+        date: item.date || new Date().toISOString()
+      }));
+
+      // Map expense data
+      const mappedExpenses: Transaction[] = expenseRes.data.map((item: any) => ({
+        id: item.id?.toString() || Math.random().toString(),
+        description: item.description || 'Chi tiêu',
+        amount: parseFloat(item.amount),
+        type: 'expense' as const,
+        category: item.category || item.loai || 'Khác',
+        date: item.date || new Date().toISOString()
+      }));
+
+      // Merge and sort by date (newest first)
+      const allTransactions = [...mappedIncomes, ...mappedExpenses].sort((a, b) => 
+        new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+
+      console.log('✅ Fetched incomes:', mappedIncomes.length, 'expenses:', mappedExpenses.length);
+      console.log('📊 Total transactions loaded:', allTransactions.length);
+      
+      return allTransactions;
+    } catch (error: any) {
+      console.error('❌ Lỗi fetch dữ liệu:', error.message);
+      return [];
+    }
   }
 
   private loadData() {
@@ -1036,7 +1115,7 @@ class ExpenseManager {
     deadlineInput.value = '';
   }
 
-  private addTransaction() {
+  private async addTransaction() {
     const descInput = document.getElementById('desc') as HTMLInputElement;
     const amountInput = document.getElementById('amount') as HTMLInputElement;
     const typeInput = document.getElementById('type') as HTMLInputElement;
@@ -1047,7 +1126,10 @@ class ExpenseManager {
     const type = typeInput.value as 'income' | 'expense';
     const category = categorySelect.value;
 
-    if (!desc || isNaN(amount) || amount <= 0) return;
+    if (!desc || isNaN(amount) || amount <= 0) {
+      this.showToast('Vui lòng điền đầy đủ thông tin giao dịch', 'error');
+      return;
+    }
 
     const transaction: Transaction = {
       id: Math.random().toString(36).substring(2, 9),
@@ -1058,21 +1140,63 @@ class ExpenseManager {
       date: new Date().toISOString()
     };
 
-    this.transactions.unshift(transaction);
-    this.saveData();
-    this.render();
-    this.formEl.reset();
-    (this as any).updateTypeToggle('expense');
-    
-    // Success feedback
     const btn = this.formEl.querySelector('button[type="submit"]') as HTMLButtonElement;
     const originalText = btn.textContent;
-    btn.textContent = 'Đã lưu!';
-    btn.classList.replace('bg-orange-600', 'bg-slate-900');
-    setTimeout(() => {
-      btn.textContent = originalText;
-      btn.classList.replace('bg-slate-900', 'bg-orange-600');
-    }, 1500);
+
+    try {
+      const token = localStorage.getItem('accessToken');
+      
+      // Disable button while saving
+      btn.disabled = true;
+      btn.textContent = '⏳ Đang lưu...';
+
+      // Determine endpoint based on transaction type - FIXED: incomes/expenses not thunhap/chiphi
+      const endpoint = type === 'income' 
+        ? 'http://127.0.0.1:8000/api/incomes/'
+        : 'http://127.0.0.1:8000/api/expenses/';
+
+      // Send to API with JWT token
+      const response = await axios.post(endpoint, {
+        amount: amount,
+        description: desc,
+        category: category,
+        date: new Date().toISOString().split('T')[0] // Ngày hôm nay (YYYY-MM-DD)
+      }, {
+        headers: {
+          'Authorization': `Token ${token}`,  // ✅ Use 'Token' not 'Bearer' for TokenAuthentication
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.status === 201 || response.status === 200) {
+        console.log('✅ Transaction saved to API, reloading data...');
+        
+        // Success feedback
+        btn.textContent = '✅ Đã lưu!';
+        btn.classList.replace('bg-orange-600', 'bg-green-600');
+        this.showToast(`${type === 'income' ? 'Thu nhập' : 'Chi tiêu'} đã được lưu thành công!`, 'success');
+        
+        // Reset form immediately
+        this.formEl.reset();
+        (this as any).updateTypeToggle('expense');
+        
+        // Reload data from API to reflect changes
+        await this.loadAndRender();
+        
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.classList.replace('bg-green-600', 'bg-orange-600');
+          btn.disabled = false;
+        }, 2000);
+      }
+    } catch (error: any) {
+      btn.disabled = false;
+      btn.textContent = originalText || 'Lưu giao dịch';
+      
+      const errorMsg = error.response?.data?.detail || error.message || 'Lỗi khi lưu giao dịch';
+      console.error('❌ Lỗi API:', errorMsg);
+      this.showToast(errorMsg, 'error');
+    }
   }
 
   private checkBudgetAlert() {
@@ -1192,6 +1316,15 @@ class ExpenseManager {
       toast.classList.add('animate-out', 'fade-out', 'slide-out-to-right-full');
       setTimeout(() => toast.remove(), 300);
     }, 5000);
+  }
+
+  // 📥 Load data from API and re-render (called on initial load and after login)
+  private async loadAndRender(skipAlerts: boolean = false): Promise<void> {
+    console.log('🔄 loadAndRender() called - fetching data from API...');
+    const fetchedTransactions = await this.fetchTransactions();
+    this.transactions = fetchedTransactions;
+    console.log('✅ Transactions updated:', this.transactions.length, 'items');
+    this.render(skipAlerts);
   }
 
   private render(skipAlerts: boolean = false) {
@@ -1334,26 +1467,50 @@ class ExpenseManager {
   }
 
   private renderBudget() {
+    // Safety check: Ensure budget elements exist
+    if (!this.budgetProgress || !this.budgetPercent || !this.budgetWarning) {
+      console.warn('⚠️ Budget elements not found in DOM');
+      return;
+    }
+
     const totalExpense = this.transactions
       .filter(t => t.type === 'expense' && new Date(t.date).getMonth() === new Date().getMonth())
       .reduce((acc, t) => acc + t.amount, 0);
 
     const percent = Math.min(Math.round((totalExpense / this.monthlyBudget) * 100), 100);
-    this.budgetPercent.textContent = `${percent}%`;
-    this.budgetProgress.style.width = `${percent}%`;
+    
+    if (this.budgetPercent && this.budgetPercent.textContent !== undefined) {
+      this.budgetPercent.textContent = `${percent}%`;
+    }
+    
+    if (this.budgetProgress && this.budgetProgress.style) {
+      this.budgetProgress.style.width = `${percent}%`;
+    }
 
     if (percent > 90) {
-      this.budgetProgress.classList.replace('bg-orange-500', 'bg-rose-500');
-      this.budgetWarning.textContent = 'Rủi ro cao! Hãy thắt chặt chi tiêu.';
-      this.budgetWarning.className = 'text-[10px] font-medium text-rose-500 italic';
+      if (this.budgetProgress && this.budgetProgress.classList) {
+        this.budgetProgress.classList.replace('bg-orange-500', 'bg-rose-500');
+      }
+      if (this.budgetWarning && this.budgetWarning.textContent !== undefined) {
+        this.budgetWarning.textContent = 'Rủi ro cao! Hãy thắt chặt chi tiêu.';
+        this.budgetWarning.className = 'text-[10px] font-medium text-rose-500 italic';
+      }
     } else if (percent > 70) {
-      this.budgetProgress.classList.replace('bg-orange-500', 'bg-amber-500');
-      this.budgetWarning.textContent = 'Sắp đạt giới hạn ngân sách.';
-      this.budgetWarning.className = 'text-[10px] font-medium text-amber-500 italic';
+      if (this.budgetProgress && this.budgetProgress.classList) {
+        this.budgetProgress.classList.replace('bg-orange-500', 'bg-amber-500');
+      }
+      if (this.budgetWarning && this.budgetWarning.textContent !== undefined) {
+        this.budgetWarning.textContent = 'Sắp đạt giới hạn ngân sách.';
+        this.budgetWarning.className = 'text-[10px] font-medium text-amber-500 italic';
+      }
     } else {
-      this.budgetProgress.className = 'h-full bg-orange-500 transition-all duration-500';
-      this.budgetWarning.textContent = 'Bạn đang chi tiêu trong tầm kiểm soát.';
-      this.budgetWarning.className = 'text-[10px] font-medium text-green-500 italic';
+      if (this.budgetProgress && this.budgetProgress.className !== undefined) {
+        this.budgetProgress.className = 'h-full bg-orange-500 transition-all duration-500';
+      }
+      if (this.budgetWarning && this.budgetWarning.textContent !== undefined) {
+        this.budgetWarning.textContent = 'Bạn đang chi tiêu trong tầm kiểm soát.';
+        this.budgetWarning.className = 'text-[10px] font-medium text-green-500 italic';
+      }
     }
   }
 

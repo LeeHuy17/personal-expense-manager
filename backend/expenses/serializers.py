@@ -7,25 +7,34 @@ class ChiPhiSerializer(serializers.ModelSerializer):
         model = ChiPhi
         fields = '__all__'
 
-    # Yêu cầu 3: Validation số tiền chi phí > 0
+    # Validation số tiền chi phí > 0
     def validate_amount(self, value):
         if value <= 0:
             raise serializers.ValidationError("Số tiền chi tiêu phải lớn hơn 0.")
         return value
 
-# Serializer cho Module Thu nhập (Sprint 1)
+# Serializer cho Module Thu nhập (Đã cập nhật theo DB mới)
 class ThuNhapSerializer(serializers.ModelSerializer):
     class Meta:
         model = ThuNhap
         fields = '__all__'
+        # Quan trọng: Không cho phép Frontend tự gửi userId lên để tránh giả mạo
+        read_only_fields = ['user'] 
 
-    # Yêu cầu 3: Validation số tiền thu nhập > 0
-    def validate_soLuong(self, value):
+    def validate_amount(self, value):
+        # Chặn trường hợp nhập số âm hoặc bằng 0
         if value <= 0:
-            raise serializers.ValidationError("Số tiền thu nhập phải lớn hơn 0.")
+            raise serializers.ValidationError("Số tiền thu nhập phải lớn hơn 0!")
         return value
 
-# Serializer cho Module Loại/Danh mục (Khắc phục lỗi ImportError)
+    def validate_date(self, value):
+        from datetime import date
+        # Chặn trường hợp chọn ngày ở tương lai (nếu nghiệp vụ không cho phép)
+        if value > date.today():
+            raise serializers.ValidationError("Ngày thu nhập không được ở tương lai!")
+        return value
+
+# Serializer cho Module Loại/Danh mục
 class LoaiSerializer(serializers.ModelSerializer):
     class Meta:
         model = Loai

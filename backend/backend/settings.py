@@ -153,13 +153,16 @@ CSRF_TRUSTED_ORIGINS = [
 # 12. Django REST Framework Config
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',  # ✅ ADD JWT Auth
+        'rest_framework.authentication.TokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',
+        'rest_framework.permissions.IsAuthenticated', # THAY ĐỔI: Chỉ cho phép người đã đăng nhập
     ],
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer', # Khuyến khích: Để xem giao diện API đẹp hơn
     ],
 }
 

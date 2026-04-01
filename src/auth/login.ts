@@ -70,29 +70,11 @@ export const handleLogin = async (e: Event) => {
                 console.log("✅ Modal closed");
             }
             
-            // 4. Chuyển hướng về trang chủ để load Dashboard view
+            // 4. Reload page to reinitialize everything with new token
             setTimeout(() => {
-                console.log("🌐 Redirecting to /");
-                console.log("📦 Final localStorage before redirect:", {
-                    isLoggedIn: localStorage.getItem('isLoggedIn'),
-                    username: localStorage.getItem('username'),
-                    accessToken: !!localStorage.getItem('accessToken')
-                });
-                
-                // Re-initialize auth UI to show dashboard
-                if ((window as any).initAuthUI) {
-                    console.log("🔐 Re-initializing auth UI after login...");
-                    (window as any).initAuthUI();
-                }
-                
-                // Update navbar immediately
-                if ((window as any).updateNavbar) {
-                    console.log("🔘 Updating navbar after login...");
-                    (window as any).updateNavbar();
-                }
+                console.log("🌐 Redirecting to / with new token");
                 
                 // Force browser to NOT use cache - add timestamp to URL
-                // This ensures complete reload of the page and ExpenseManager initialization
                 const redirectUrl = window.location.origin + '?v=' + Date.now();
                 console.log("🔄 Force reload with URL:", redirectUrl);
                 
