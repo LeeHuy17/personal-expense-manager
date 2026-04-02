@@ -21,9 +21,11 @@ class ChiPhiViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        # Tương tự: Bảo mật tuyệt đối dữ liệu chi phí
         return ChiPhi.objects.filter(user=self.request.user).order_by('-date')
 
     def perform_create(self, serializer):
+        # Tự động gán User khi lưu khoản chi mới
         serializer.save(user=self.request.user)
 
 class LoaiViewSet(viewsets.ModelViewSet):
