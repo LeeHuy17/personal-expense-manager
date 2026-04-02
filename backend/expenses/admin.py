@@ -14,9 +14,10 @@ class LoaiAdmin(admin.ModelAdmin):
 
 @admin.register(ThuNhap)
 class ThuNhapAdmin(admin.ModelAdmin):
-    list_display = ('incomeId', 'user', 'soLuong', 'date')
-    list_filter = ('date', 'user')
-    search_fields = ('user__username',) # Tìm kiếm theo tên user
+    # Thay 'soLuong' bằng 'amount' và thêm 'loai' để hiển thị danh mục
+    list_display = ('incomeId', 'user', 'loai', 'amount', 'date') 
+    list_filter = ('date', 'user', 'loai') 
+    search_fields = ('user__username', 'loai__tenLoai', 'moTa')
 
 @admin.register(ChiPhi)
 class ChiPhiAdmin(admin.ModelAdmin):
