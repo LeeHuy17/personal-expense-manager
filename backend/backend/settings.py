@@ -25,7 +25,7 @@ DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL')
 
 # 2. Bảo mật & Chế độ Debug
 SECRET_KEY = 'django-insecure-dev-key'
-DEBUG = True
+DEBUG = True  # Enable debug again
 ALLOWED_HOSTS = ['*']
 
 # 3. Định nghĩa các App

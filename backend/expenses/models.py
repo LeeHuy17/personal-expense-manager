@@ -67,14 +67,13 @@ class Loai(models.Model):
 
 # ===================== THU NHAP (Income) =====================
 class ThuNhap(models.Model):
-    user = models.ForeignKey(AuthUser, on_delete=models.CASCADE, related_name='thu_nhaps')
-    
     incomeId = models.AutoField(primary_key=True)
     
     user = models.ForeignKey(
         AuthUser, 
         on_delete=models.CASCADE,
-        db_column='userId'
+        db_column='userId',
+        related_name='thu_nhaps'
     )
 
     # 1. Thêm khóa ngoại tới Loai (Rất quan trọng để biết thu nhập từ đâu: Lương/Thưởng)
@@ -96,26 +95,29 @@ class ThuNhap(models.Model):
 
 # ===================== CHI PHI (Expense) =====================
 class ChiPhi(models.Model):
-    maChiPhi = models.AutoField(primary_key=True)
+    chiPhiId = models.AutoField(primary_key=True) # Đặt tên đồng bộ với incomeId
 
     user = models.ForeignKey(
         AuthUser, 
         on_delete=models.CASCADE,
-        db_column='userId'
+        db_column='userId',
+        related_name='chi_phis' # Thêm related_name để dễ truy vấn ngược
     )
 
     loai = models.ForeignKey(
         Loai,
         on_delete=models.CASCADE,
-        db_column='loaiId'
+        db_column='loaiId',
+        null=True, # Cho phép null để linh hoạt giống ThuNhap
+        blank=True
     )
 
-    amount = models.FloatField()
+    amount = models.FloatField(verbose_name="Số tiền chi")
     date = models.DateField()
     moTa = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self):
-        return f"{self.amount} - {self.user.username}"
+        return f"Chi: {self.amount} - {self.user.username}"
 
 # ===================== BAO CAO =====================
 class BaoCao(models.Model):

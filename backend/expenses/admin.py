@@ -21,7 +21,7 @@ class ThuNhapAdmin(admin.ModelAdmin):
 
 @admin.register(ChiPhi)
 class ChiPhiAdmin(admin.ModelAdmin):
-    list_display = ('maChiPhi', 'user', 'loai', 'amount', 'date')
+    list_display = ('chiPhiId', 'user', 'loai', 'amount', 'date')
     list_filter = ('date', 'loai', 'user')
     # date_hierarchy = 'date' # Thêm thanh điều hướng thời gian rất chuyên nghiệp
 

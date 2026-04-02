@@ -938,21 +938,21 @@ class ExpenseManager {
 
       // Map income data
       const mappedIncomes: Transaction[] = incomeRes.data.map((item: any) => ({
-        id: item.id?.toString() || Math.random().toString(),
-        description: item.description || 'Thu nhập',
+        id: item.incomeId?.toString() || Math.random().toString(),
+        description: item.moTa || 'Thu nhập',
         amount: parseFloat(item.amount),
         type: 'income' as const,
-        category: item.category || item.loai || 'Khác',
+        category: item.loai?.toString() || 'Khác', // loai is ID, convert to string
         date: item.date || new Date().toISOString()
       }));
 
       // Map expense data
       const mappedExpenses: Transaction[] = expenseRes.data.map((item: any) => ({
-        id: item.id?.toString() || Math.random().toString(),
-        description: item.description || 'Chi tiêu',
+        id: item.chiPhiId?.toString() || Math.random().toString(),
+        description: item.moTa || 'Chi tiêu',
         amount: parseFloat(item.amount),
         type: 'expense' as const,
-        category: item.category || item.loai || 'Khác',
+        category: item.loai?.toString() || 'Khác', // loai is ID, convert to string
         date: item.date || new Date().toISOString()
       }));
 
