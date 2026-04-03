@@ -18,9 +18,14 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 
 # Đọc từ file .env.local
-EMAIL_HOST_USER = env('EMAIL_HOST_USER')
-EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD')
-DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL')
+EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='NOT_FOUND')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='NOT_FOUND')
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='NOT_FOUND')
+
+print("EMAIL_HOST_USER =", EMAIL_HOST_USER)
+print("EMAIL_HOST_PASSWORD =", EMAIL_HOST_PASSWORD)
+print("DEFAULT_FROM_EMAIL =", DEFAULT_FROM_EMAIL)
+
 
 
 # 2. Bảo mật & Chế độ Debug
@@ -39,6 +44,7 @@ INSTALLED_APPS = [
     
     # App của bạn
     'expenses',
+    'ai',
     
     # Thêm DRF để làm API 
     'rest_framework',
