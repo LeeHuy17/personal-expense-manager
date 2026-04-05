@@ -284,6 +284,8 @@ interface Transaction {
   type: 'income' | 'expense';
   category: string;
   date: string;
+  incomeId?: number;  // 🔑 Primary key for income records
+  chiPhiId?: number;  // 🔑 Primary key for expense records
 }
 
 interface Goal {
@@ -939,6 +941,7 @@ class ExpenseManager {
       // Map income data
       const mappedIncomes: Transaction[] = incomeRes.data.map((item: any) => ({
         id: item.incomeId?.toString() || Math.random().toString(),
+        incomeId: item.incomeId,  // 🔑 Store primary key for delete operations
         description: item.moTa || 'Thu nhập',
         amount: parseFloat(item.amount),
         type: 'income' as const,
@@ -949,6 +952,7 @@ class ExpenseManager {
       // Map expense data
       const mappedExpenses: Transaction[] = expenseRes.data.map((item: any) => ({
         id: item.chiPhiId?.toString() || Math.random().toString(),
+        chiPhiId: item.chiPhiId,  // 🔑 Store primary key for delete operations
         description: item.moTa || 'Chi tiêu',
         amount: parseFloat(item.amount),
         type: 'expense' as const,
@@ -1199,6 +1203,72 @@ class ExpenseManager {
     }
   }
 
+  private async deleteTransaction(id: any, type: 'income' | 'expense') {
+    // 🔍 DEBUG 1: Kiểm tra ID có bị undefined không
+    console.log('🔍 [DEBUG 1] ID nhận được:', id, '| Type:', type);
+    
+    if (!id || id === 'undefined' || id === undefined) {
+      console.error('❌ [ERROR] ID không hợp lệ! ID:', id);
+      this.showToast('❌ Lỗi: Không tìm thấy ID giao dịch!', 'error');
+      return;
+    }
+
+    // 1. Xác nhận nghiệp vụ
+    const confirmMsg = type === 'income' 
+        ? "Xóa khoản thu này sẽ trừ vào số dư của bạn. Tiếp tục?" 
+        : "Xóa khoản chi này sẽ hoàn lại tiền vào số dư. Tiếp tục?";
+    
+    if (!confirm(confirmMsg)) return;
+
+    // 2. Cấu hình API
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      console.error('❌ [ERROR] Token không tồn tại');
+      this.showToast('❌ Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại!', 'error');
+      return;
+    }
+
+    const endpoint = type === 'income' ? 'incomes' : 'expenses';
+    const url = `http://127.0.0.1:8000/api/${endpoint}/${id}/`; // 🔍 DEBUG: URL với trailing slash
+
+    try {
+      // 🔍 DEBUG 2: Log URL và token trước khi gửi
+      console.log('🚀 [DEBUG 2] Gửi DELETE request tới:', url);
+      console.log('🔐 Token (first 20 chars):', token.substring(0, 20) + '...');
+      
+      // 3. Gửi lệnh DELETE thực thụ xuống Database
+      const response = await axios.delete(url, {
+        headers: {
+          'Authorization': `Token ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      // 🔍 DEBUG 3: Log phản hồi từ server
+      console.log('✅ [DEBUG 3] Phản hồi từ Server - Status:', response.status);
+      
+      if (response.status === 204) {
+        console.log(`✅ Đã xóa vĩnh viễn ${type} ID: ${id}`);
+        this.showToast(`✅ Xóa ${type === 'income' ? 'khoản thu' : 'khoản chi'} thành công!`, 'success');
+        
+        // 4. QUAN TRỌNG: Gọi lại hàm fetch dữ liệu để tính lại Số dư và vẽ lại UI
+        console.log('🔄 [DEBUG 4] Đang tải lại dữ liệu từ API...');
+        await this.loadAndRender();
+        console.log('✅ [DEBUG 4] Tải lại UI hoàn tất');
+      }
+    } catch (error: any) {
+      // 🔍 DEBUG 5: Log chi tiết lỗi
+      console.error('❌ [ERROR] Chi tiết lỗi DELETE:');
+      console.error('  - Status code:', error.response?.status);
+      console.error('  - Response data:', error.response?.data);
+      console.error('  - Error message:', error.message);
+      console.error('  - Full error:', error);
+      
+      const errorMsg = error.response?.data?.detail || error.response?.data?.error || error.message || 'Không thể xóa giao dịch';
+      this.showToast(`❌ ${errorMsg}`, 'error');
+    }
+  }
+
   private checkBudgetAlert() {
     const totalExpense = this.transactions
       .filter(t => t.type === 'expense' && new Date(t.date).getMonth() === new Date().getMonth())
@@ -1224,22 +1294,6 @@ class ExpenseManager {
       this.showToast(`Cảnh báo: Bạn đã vượt ngân sách cho danh mục "${category}"!`, 'error');
     } else if (totalExpense > budget * 0.8) {
       this.showToast(`Lưu ý: Bạn đã tiêu hơn 80% ngân sách cho "${category}".`, 'warning');
-    }
-  }
-
-  public deleteTransaction(id: string) {
-    const el = document.querySelector(`[data-id="${id}"]`);
-    if (el) {
-      el.classList.add('opacity-0', '-translate-x-8');
-      setTimeout(() => {
-        this.transactions = this.transactions.filter(t => t.id !== id);
-        this.saveData();
-        this.render();
-      }, 300);
-    } else {
-      this.transactions = this.transactions.filter(t => t.id !== id);
-      this.saveData();
-      this.render();
     }
   }
 
@@ -1708,8 +1762,14 @@ class ExpenseManager {
 
     this.listEl.innerHTML = paginated.map((t, index) => {
       const categoryObj = this.categories.find(c => c.name === t.category) || { icon: 'tag', color: '#64748b' };
+      // 🔑 Lấy đúng ID khóa chính (incomeId hoặc chiPhiId)
+      const primaryId = t.type === 'income' ? t.incomeId : t.chiPhiId;
+      const displayId = primaryId || t.id; // Backup to t.id if primary key not found
+      
+      console.log(`🔍 [RENDER] Transaction - Type: ${t.type}, Primary ID: ${primaryId}, Display ID: ${displayId}`);
+      
       return `
-      <div data-id="${t.id}" class="p-6 flex items-center justify-between hover:bg-orange-50/30 dark:hover:bg-slate-800 transition-all group animate-in slide-in-from-bottom-4 fade-in duration-500" style="animation-delay: ${index * 30}ms">
+      <div data-id="${displayId}" class="p-6 flex items-center justify-between hover:bg-orange-50/30 dark:hover:bg-slate-800 transition-all group animate-in slide-in-from-bottom-4 fade-in duration-500" style="animation-delay: ${index * 30}ms">
         <div class="flex items-center gap-5">
           <div class="w-12 h-12 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110" style="background-color: ${categoryObj.color}15; color: ${categoryObj.color}">
             <i data-lucide="${categoryObj.icon}" class="w-6 h-6"></i>
@@ -1726,7 +1786,7 @@ class ExpenseManager {
           <p class="font-black text-lg balance-value ${t.type === 'income' ? 'text-green-600' : 'text-rose-600'}">
             ${t.type === 'income' ? '+' : '-'}${this.formatCurrency(t.amount)}
           </p>
-          <button onclick="window.expenseManager.deleteTransaction('${t.id}')" class="p-2.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all rounded-xl opacity-0 group-hover:opacity-100">
+          <button onclick="window.expenseManager.deleteTransaction('${displayId}', '${t.type}')" class="p-2.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all rounded-xl opacity-0 group-hover:opacity-100" title="Xóa giao dịch này">
             <i data-lucide="trash-2" class="w-4 h-4"></i>
           </button>
         </div>
