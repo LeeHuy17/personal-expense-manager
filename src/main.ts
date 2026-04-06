@@ -1862,30 +1862,38 @@ class ExpenseManager {
       .append('g')
       .attr('class', 'arc');
 
-    arcs.append('path')
+    const paths = arcs.append('path') as d3.Selection<SVGPathElement, d3.PieArcDatum<{ name: string; value: number; }>, SVGGElement, unknown>;
+    
+    paths
       .attr('fill', d => color(d.data.name))
-      .attr('d', arc)
+      .attr('d', d => arc(d) as string)
       .style('opacity', 0.8)
       .attr('class', 'cursor-pointer transition-all duration-500')
-      .on('mouseover', function(event, d) {
+      .on('mouseover', function(event, d: d3.PieArcDatum<{ name: string; value: number; }>) {
         d3.select(this)
           .transition()
           .duration(500)
-          .attr('d', arcHover)
+          .attrTween('d', () => {
+            const i = d3.interpolate({ startAngle: d.startAngle, endAngle: d.startAngle }, d);
+            return (t) => arcHover(i(t) as any)!;
+          })
           .style('opacity', 1)
           .attr('filter', 'drop-shadow(0 0 8px rgba(249, 115, 22, 0.4))');
       })
-      .on('mouseout', function(event, d) {
+      .on('mouseout', function(event, d: d3.PieArcDatum<{ name: string; value: number; }>) {
         d3.select(this)
           .transition()
           .duration(500)
-          .attr('d', arc)
+          .attrTween('d', () => {
+            const i = d3.interpolate(d, { startAngle: d.endAngle, endAngle: d.endAngle });
+            return (t) => arc(i(t) as any)!;
+          })
           .style('opacity', 0.8)
           .attr('filter', 'none');
       })
       .transition()
       .duration(1000)
-      .attrTween('d', function(d) {
+      .attrTween('d', function(this: SVGPathElement, d: d3.PieArcDatum<{ name: string; value: number; }>) {
         const i = d3.interpolate({ startAngle: 0, endAngle: 0 }, d);
         return function(t) { return arc(i(t))!; };
       });
