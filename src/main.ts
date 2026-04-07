@@ -283,6 +283,7 @@ interface Transaction {
   amount: number;
   type: 'income' | 'expense';
   category: string;
+  categoryId?: number | string;
   date: string;
   incomeId?: number;  // 🔑 Primary key for income records
   chiPhiId?: number;  // 🔑 Primary key for expense records
@@ -297,21 +298,23 @@ interface Goal {
 }
 
 interface Category {
+  id: number | string;
   name: string;
   icon: string;
   color: string;
+  type: 'income' | 'expense' | 'Thu nhập' | 'Chi tiêu';
 }
 
 class ExpenseManager {
   private transactions: Transaction[] = [];
   private categories: Category[] = [
-    { name: 'Ăn uống', icon: 'utensils', color: '#f59e0b' },
-    { name: 'Di chuyển', icon: 'car', color: '#3b82f6' },
-    { name: 'Mua sắm', icon: 'shopping-bag', color: '#ec4899' },
-    { name: 'Giải trí', icon: 'gamepad-2', color: '#a855f7' },
-    { name: 'Nhà cửa', icon: 'home', color: '#10b981' },
-    { name: 'Lương', icon: 'banknote', color: '#14b8a6' },
-    { name: 'Khác', icon: 'plus', color: '#64748b' }
+    { id: 'default-1', name: 'Ăn uống', icon: 'utensils', color: '#f59e0b', type: 'Chi tiêu' },
+    { id: 'default-2', name: 'Di chuyển', icon: 'car', color: '#3b82f6', type: 'Chi tiêu' },
+    { id: 'default-3', name: 'Mua sắm', icon: 'shopping-bag', color: '#ec4899', type: 'Chi tiêu' },
+    { id: 'default-4', name: 'Giải trí', icon: 'gamepad-2', color: '#a855f7', type: 'Chi tiêu' },
+    { id: 'default-5', name: 'Nhà cửa', icon: 'home', color: '#10b981', type: 'Chi tiêu' },
+    { id: 'default-6', name: 'Lương', icon: 'banknote', color: '#14b8a6', type: 'Thu nhập' },
+    { id: 'default-7', name: 'Khác', icon: 'plus', color: '#64748b', type: 'Chi tiêu' }
   ];
   private categoryBudgets: Record<string, number> = {};
   private goals: Goal[] = [];
@@ -319,6 +322,7 @@ class ExpenseManager {
   private isDarkMode: boolean = false;
   private isIncognito: boolean = false;
   private isLoggedIn: boolean = false;
+  private currentCategoryType: 'Thu nhập' | 'Chi tiêu' = 'Chi tiêu';
 
   // Elements
   private landingView: HTMLElement;
@@ -376,12 +380,22 @@ class ExpenseManager {
     this.isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
     console.log("🔍 ExpenseManager Constructor: isLoggedIn =", this.isLoggedIn);
     
-    if (this.transactions.length === 0 && !this.isLoggedIn) {
-      this.addMockData();
+    // Load categories from backend if logged in
+    if (this.isLoggedIn) {
+      this.loadCategories()
+        .catch((error) => console.error('Lỗi khi tải danh mục:', error))
+        .finally(() => {
+          this.renderCategoryDropdown(this.currentCategoryType);
+          this.loadAndRender();
+        });
+    } else {
+      if (this.transactions.length === 0) {
+        this.addMockData();
+      }
+      this.renderCategoryDropdown(this.currentCategoryType);
+      this.loadAndRender();
     }
     
-    // Load real data and render UI
-    this.loadAndRender();
     this.getAIAdvice();
     this.toggleView();
     
@@ -581,6 +595,10 @@ class ExpenseManager {
       this.addTransaction();
     });
 
+    // Type selection buttons
+    document.getElementById('type-expense-btn')?.addEventListener('click', () => this.setTransactionType('expense'));
+    document.getElementById('type-income-btn')?.addEventListener('click', () => this.setTransactionType('income'));
+
     document.getElementById('clear-all')?.addEventListener('click', () => {
       if (confirm('Bạn có chắc chắn muốn xóa tất cả giao dịch?')) {
         this.transactions = [];
@@ -745,6 +763,7 @@ class ExpenseManager {
       overlay.classList.remove('hidden');
       overlay.classList.add('flex');
       catModal.classList.remove('hidden');
+      this.setCategoryType('Chi tiêu'); // Set default type
       this.renderCategoryManager();
     });
 
@@ -939,26 +958,34 @@ class ExpenseManager {
       ]);
 
       // Map income data
-      const mappedIncomes: Transaction[] = incomeRes.data.map((item: any) => ({
-        id: item.incomeId?.toString() || Math.random().toString(),
-        incomeId: item.incomeId,  // 🔑 Store primary key for delete operations
-        description: item.moTa || 'Thu nhập',
-        amount: parseFloat(item.amount),
-        type: 'income' as const,
-        category: item.loai?.toString() || 'Khác', // loai is ID, convert to string
-        date: item.date || new Date().toISOString()
-      }));
+      const mappedIncomes: Transaction[] = incomeRes.data.map((item: any) => {
+        const categoryName = this.categories.find(c => c.id.toString() === item.loai?.toString())?.name || 'Khác';
+        return {
+          id: item.incomeId?.toString() || Math.random().toString(),
+          incomeId: item.incomeId,  // 🔑 Store primary key for delete operations
+          description: item.moTa || 'Thu nhập',
+          amount: parseFloat(item.amount),
+          type: 'income' as const,
+          category: categoryName,
+          categoryId: item.loai,
+          date: item.date || new Date().toISOString()
+        };
+      });
 
       // Map expense data
-      const mappedExpenses: Transaction[] = expenseRes.data.map((item: any) => ({
-        id: item.chiPhiId?.toString() || Math.random().toString(),
-        chiPhiId: item.chiPhiId,  // 🔑 Store primary key for delete operations
-        description: item.moTa || 'Chi tiêu',
-        amount: parseFloat(item.amount),
-        type: 'expense' as const,
-        category: item.loai?.toString() || 'Khác', // loai is ID, convert to string
-        date: item.date || new Date().toISOString()
-      }));
+      const mappedExpenses: Transaction[] = expenseRes.data.map((item: any) => {
+        const categoryName = this.categories.find(c => c.id.toString() === item.loai?.toString())?.name || 'Khác';
+        return {
+          id: item.chiPhiId?.toString() || Math.random().toString(),
+          chiPhiId: item.chiPhiId,  // 🔑 Store primary key for delete operations
+          description: item.moTa || 'Chi tiêu',
+          amount: parseFloat(item.amount),
+          type: 'expense' as const,
+          category: categoryName,
+          categoryId: item.loai,
+          date: item.date || new Date().toISOString()
+        };
+      });
 
       // Merge and sort by date (newest first)
       const allTransactions = [...mappedIncomes, ...mappedExpenses].sort((a, b) => 
@@ -987,7 +1014,13 @@ class ExpenseManager {
         // Keep default categories if migration is needed
         localStorage.removeItem('categories');
       } else {
-        this.categories = parsed;
+        this.categories = parsed.map((item: any, index: number) => ({
+          id: item.id ?? `cached-${index}`,
+          name: item.name,
+          icon: item.icon,
+          color: item.color,
+          type: item.type
+        }));
       }
     }
 
@@ -1005,7 +1038,7 @@ class ExpenseManager {
     localStorage.setItem('goals', JSON.stringify(this.goals));
   }
 
-  private addCategory() {
+  private async addCategory() {
     const input = document.getElementById('new-category-input') as HTMLInputElement;
     const iconInput = document.getElementById('new-category-icon') as HTMLSelectElement;
     const colorInput = document.getElementById('new-category-color') as HTMLInputElement;
@@ -1014,30 +1047,221 @@ class ExpenseManager {
     const icon = iconInput.value;
     const color = colorInput.value;
 
-    if (!name) return;
-    if (this.categories.some(c => c.name === name)) {
-      this.showToast('Danh mục đã tồn tại', 'error');
+    if (!name) {
+      this.showToast('Vui lòng nhập tên danh mục', 'error');
       return;
     }
 
-    this.categories.push({ name, icon, color });
-    this.saveData();
-    this.updateCategoryDropdowns();
-    this.renderCategoryManager();
-    input.value = '';
-    this.showToast('Đã thêm danh mục mới', 'success');
+    const duplicateExists = this.categories.some(c => c.name === name && this.isCategoryTypeMatch(c.type, this.currentCategoryType));
+    if (duplicateExists) {
+      this.showToast('Danh mục đã tồn tại trong phân loại này', 'error');
+      return;
+    }
+
+    // Gửi về backend
+    await this.saveCategory(name, icon, color);
   }
 
-  public deleteCategory(name: string) {
+  private isCategoryTypeMatch(categoryType: string, selectedType: 'Thu nhập' | 'Chi tiêu'): boolean {
+    const backendType = selectedType === 'Thu nhập' ? 'income' : 'expense';
+    return categoryType === selectedType || categoryType === backendType;
+  }
+
+  private getCategoryTypeLabel(categoryType: string): string {
+    if (categoryType === 'income' || categoryType === 'Thu nhập') return 'Thu nhập';
+    if (categoryType === 'expense' || categoryType === 'Chi tiêu') return 'Chi tiêu';
+    return categoryType;
+  }
+
+  private async saveCategory(name: string, icon: string, color: string) {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        this.showToast('Phiên đăng nhập hết hạn', 'error');
+        return;
+      }
+
+      // Map frontend type to backend type
+      const typeMap: Record<string, string> = {
+        'Thu nhập': 'income',
+        'Chi tiêu': 'expense'
+      };
+
+      const backendType = typeMap[this.currentCategoryType] || 'expense';
+
+      const response = await axios.post('http://127.0.0.1:8000/api/categories/', {
+        tenLoai: name,
+        icon: icon,
+        color: color,
+        type: backendType
+      }, {
+        headers: {
+          'Authorization': `Token ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.status === 201) {
+        this.showToast('Danh mục đã được tạo thành công!', 'success');
+        // Reload categories to reflect changes
+        await this.loadCategories();
+        // Reset form
+        const input = document.getElementById('new-category-input') as HTMLInputElement;
+        const iconInput = document.getElementById('new-category-icon') as HTMLSelectElement;
+        const colorInput = document.getElementById('new-category-color') as HTMLInputElement;
+        input.value = '';
+        iconInput.value = 'shopping-bag';
+        colorInput.value = '#f97316';
+      }
+    } catch (error: any) {
+      console.error('Lỗi khi lưu danh mục:', error);
+      const errorMsg = error.response?.data?.detail || error.message || 'Không thể tạo danh mục';
+      this.showToast(errorMsg, 'error');
+    }
+  }
+
+  private async loadCategories() {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) return;
+
+      const response = await axios.get('http://127.0.0.1:8000/api/categories/', {
+        headers: { 'Authorization': `Token ${token}` }
+      });
+
+      // Map từ backend data sang frontend format
+      this.categories = response.data.map((cat: any) => ({
+        id: cat.loaiId,
+        name: cat.tenLoai,
+        icon: cat.icon,
+        color: cat.color,
+        type: cat.type
+      }));
+
+      this.saveData(); // Lưu vào localStorage để đồng bộ
+      this.updateCategoryDropdowns();
+    } catch (error) {
+      console.error('Lỗi khi tải danh mục:', error);
+      // Fallback to localStorage if API fails
+    }
+  }
+
+  public setCategoryType(type: 'Thu nhập' | 'Chi tiêu') {
+    this.currentCategoryType = type;
+    
+    // Cập nhật UI nút bấm
+    const btnIncome = document.getElementById('btn-type-income');
+    const btnExpense = document.getElementById('btn-type-expense');
+
+    if (type === 'Thu nhập') {
+      btnIncome?.classList.replace('border-gray-100', 'border-green-500');
+      btnIncome?.classList.replace('text-gray-400', 'text-green-600');
+      btnIncome?.classList.add('bg-green-50');
+      
+      btnExpense?.classList.replace('border-orange-500', 'border-gray-100');
+      btnExpense?.classList.replace('text-orange-600', 'text-gray-400');
+      btnExpense?.classList.remove('bg-orange-50');
+    } else {
+      // Ngược lại cho Chi tiêu (giữ màu cam như thiết kế cũ của bạn)
+      btnExpense?.classList.replace('border-gray-100', 'border-orange-500');
+      btnExpense?.classList.replace('text-gray-400', 'text-orange-600');
+      btnExpense?.classList.add('bg-orange-50');
+      
+      btnIncome?.classList.replace('border-green-500', 'border-gray-100');
+      btnIncome?.classList.replace('text-green-600', 'text-gray-400');
+      btnIncome?.classList.remove('bg-green-50');
+    }
+  }
+
+  private setTransactionType(type: string) {
+    const expenseBtn = document.getElementById('type-expense-btn');
+    const incomeBtn = document.getElementById('type-income-btn');
+    const hiddenInput = document.getElementById('type') as HTMLInputElement;
+    
+    if (type === 'expense') {
+      expenseBtn?.classList.add('bg-white', 'dark:bg-slate-900', 'shadow-sm', 'text-rose-600');
+      expenseBtn?.classList.remove('text-slate-400');
+      incomeBtn?.classList.remove('bg-white', 'dark:bg-slate-900', 'shadow-sm', 'text-emerald-600');
+      incomeBtn?.classList.add('text-slate-400');
+      hiddenInput.value = 'expense';
+    } else {
+      incomeBtn?.classList.add('bg-white', 'dark:bg-slate-900', 'shadow-sm', 'text-emerald-600');
+      incomeBtn?.classList.remove('text-slate-400');
+      expenseBtn?.classList.remove('bg-white', 'dark:bg-slate-900', 'shadow-sm', 'text-rose-600');
+      expenseBtn?.classList.add('text-slate-400');
+      hiddenInput.value = 'income';
+    }
+    
+    // Update category dropdown based on type
+    this.updateCategoryDropdownForTransaction(type);
+  }
+
+  private renderCategoryDropdown(type: 'Thu nhập' | 'Chi tiêu') {
+    const catSelect = document.getElementById('transaction-category') as HTMLSelectElement;
+    if (!catSelect) return;
+
+    const filteredCategories = this.categories.filter(c => this.isCategoryTypeMatch(c.type, type));
+    if (filteredCategories.length === 0) {
+      catSelect.innerHTML = '<option value="">-- Vui lòng tạo danh mục trước --</option>';
+      catSelect.value = '';
+      return;
+    }
+
+    catSelect.innerHTML = filteredCategories.map(c => `
+      <option value="${c.id}">${c.name}</option>
+    `).join('');
+    catSelect.value = filteredCategories[0].id.toString();
+  }
+
+  private updateCategoryDropdownForTransaction(type: string) {
+    const transactionType = type === 'income' ? 'Thu nhập' : 'Chi tiêu';
+    this.renderCategoryDropdown(transactionType);
+  }
+
+  public async deleteCategory(id: number | string) {
+    const category = this.categories.find(c => c.id.toString() === id.toString());
+    if (!category) {
+      this.showToast('Danh mục không tồn tại', 'error');
+      return;
+    }
+
     if (this.categories.length <= 1) {
       this.showToast('Phải có ít nhất một danh mục', 'error');
       return;
     }
-    this.categories = this.categories.filter(c => c.name !== name);
-    delete this.categoryBudgets[name];
-    this.saveData();
-    this.updateCategoryDropdowns();
-    this.renderCategoryManager();
+
+    if (!confirm(`Bạn có chắc chắn muốn xóa danh mục "${category.name}"? Các giao dịch liên quan có thể bị ảnh hưởng.`)) {
+      return;
+    }
+
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      this.showToast('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 'error');
+      return;
+    }
+
+    try {
+      const url = `http://127.0.0.1:8000/api/categories/${category.id}/`;
+      const response = await axios.delete(url, {
+        headers: {
+          'Authorization': `Token ${token}`
+        }
+      });
+
+      if (response.status === 204) {
+        this.categories = this.categories.filter(c => c.id.toString() !== id.toString());
+        delete this.categoryBudgets[category.name];
+        this.saveData();
+        this.updateCategoryDropdowns();
+        this.renderCategoryManager();
+        await this.loadAndRender();
+        this.showToast('Đã xóa danh mục thành công!', 'success');
+      }
+    } catch (error: any) {
+      console.error('Lỗi khi xóa danh mục:', error);
+      const msg = error.response?.data?.error || error.response?.data?.detail || error.message || 'Không thể xóa danh mục này!';
+      this.showToast(msg, 'error');
+    }
   }
 
   public setCategoryBudget(name: string, amount: number) {
@@ -1049,14 +1273,17 @@ class ExpenseManager {
   }
 
   private updateCategoryDropdowns() {
-    const catSelect = document.getElementById('category') as HTMLSelectElement;
     const filterSelect = document.getElementById('filter-category') as HTMLSelectElement;
     const budgetSelect = document.getElementById('budget-category') as HTMLSelectElement;
 
     const options = this.categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
-    if (catSelect) catSelect.innerHTML = options;
     if (filterSelect) filterSelect.innerHTML = `<option value="all">Tất cả danh mục</option>` + options;
     if (budgetSelect) budgetSelect.innerHTML = options;
+    
+    // Update transaction category dropdown based on current type
+    const hiddenInput = document.getElementById('type') as HTMLInputElement;
+    const currentType = hiddenInput?.value || 'expense';
+    this.updateCategoryDropdownForTransaction(currentType);
   }
 
   private renderCategoryManager() {
@@ -1068,9 +1295,12 @@ class ExpenseManager {
             <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background-color: ${c.color}15; color: ${c.color}">
               <i data-lucide="${c.icon}" class="w-5 h-5"></i>
             </div>
-            <span class="text-sm font-bold text-slate-700 dark:text-slate-200">${c.name}</span>
+            <div class="flex flex-col">
+              <span class="text-sm font-bold text-slate-700 dark:text-slate-200">${c.name}</span>
+              <span class="text-xs text-slate-500 dark:text-slate-400">${this.getCategoryTypeLabel(c.type)}</span>
+            </div>
           </div>
-          <button onclick="window.expenseManager.deleteCategory('${c.name}')" class="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 p-2 rounded-xl transition-colors">
+          <button onclick="window.expenseManager.deleteCategory('${c.id}')" class="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 p-2 rounded-xl transition-colors">
             <i data-lucide="trash-2" class="w-4 h-4"></i>
           </button>
         </div>
@@ -1123,14 +1353,17 @@ class ExpenseManager {
     const descInput = document.getElementById('desc') as HTMLInputElement;
     const amountInput = document.getElementById('amount') as HTMLInputElement;
     const typeInput = document.getElementById('type') as HTMLInputElement;
-    const categorySelect = document.getElementById('category') as HTMLSelectElement;
+    const categorySelect = document.getElementById('transaction-category') as HTMLSelectElement;
 
     const desc = descInput.value;
     const amount = this.parseFormattedNumber(amountInput.value);
     const type = typeInput.value as 'income' | 'expense';
-    const category = categorySelect.value;
+    const categoryId = categorySelect.value;
+    const selectedCategoryId = parseInt(categoryId, 10);
+    const categoryObj = this.categories.find(c => c.id.toString() === categoryId.toString());
+    const categoryName = categoryObj?.name || 'Khác';
 
-    if (!desc || isNaN(amount) || amount <= 0) {
+    if (!desc || isNaN(amount) || amount <= 0 || !categoryId || isNaN(selectedCategoryId)) {
       this.showToast('Vui lòng điền đầy đủ thông tin giao dịch', 'error');
       return;
     }
@@ -1140,7 +1373,8 @@ class ExpenseManager {
       description: desc,
       amount,
       type,
-      category,
+      category: categoryName,
+      categoryId: selectedCategoryId,
       date: new Date().toISOString()
     };
 
@@ -1163,7 +1397,7 @@ class ExpenseManager {
       const response = await axios.post(endpoint, {
         amount: amount,
         description: desc,
-        category: category,
+        loai: selectedCategoryId,
         date: new Date().toISOString().split('T')[0] // Ngày hôm nay (YYYY-MM-DD)
       }, {
         headers: {

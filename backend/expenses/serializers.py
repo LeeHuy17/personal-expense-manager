@@ -50,3 +50,4 @@ class LoaiSerializer(serializers.ModelSerializer):
     class Meta:
         model = Loai
         fields = '__all__'
+        read_only_fields = ['user', 'loaiId']
