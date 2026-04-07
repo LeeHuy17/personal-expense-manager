@@ -61,6 +61,16 @@ class Loai(models.Model):
         ('expense', 'Chi phí'),
     ]
     type = models.CharField(max_length=50, choices=TYPE_CHOICES)
+    icon = models.CharField(max_length=50, default='plus')  # Biểu tượng từ Lucide icons
+    color = models.CharField(max_length=7, default='#64748b')  # Màu sắc hex
+    
+    user = models.ForeignKey(
+        AuthUser,
+        on_delete=models.CASCADE,
+        related_name='categories',
+        null=True,
+        blank=True
+    )
 
     def __str__(self):
         return f"{self.tenLoai} ({self.get_type_display()})"
@@ -79,7 +89,7 @@ class ThuNhap(models.Model):
     # 1. Thêm khóa ngoại tới Loai (Rất quan trọng để biết thu nhập từ đâu: Lương/Thưởng)
     loai = models.ForeignKey(
         Loai,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         db_column='loaiId',
         null=True, # Cho phép null tạm thời để tránh lỗi migrate dữ liệu cũ
         blank=True
@@ -106,7 +116,7 @@ class ChiPhi(models.Model):
 
     loai = models.ForeignKey(
         Loai,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         db_column='loaiId',
         null=True, # Cho phép null để linh hoạt giống ThuNhap
         blank=True

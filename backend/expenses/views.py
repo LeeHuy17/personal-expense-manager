@@ -1,4 +1,6 @@
-from rest_framework import viewsets, permissions
+from django.db.models import ProtectedError
+from rest_framework import viewsets, permissions, status
+from rest_framework.response import Response
 from .models import ChiPhi, ThuNhap, Loai
 from .serializers import ChiPhiSerializer, ThuNhapSerializer, LoaiSerializer
 
@@ -32,3 +34,20 @@ class LoaiViewSet(viewsets.ModelViewSet):
     queryset = Loai.objects.all()
     serializer_class = LoaiSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Loai.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        try:
+            self.perform_destroy(instance)
+        except ProtectedError:
+            return Response(
+                {"error": "Không thể xóa danh mục đã có giao dịch liên quan."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
