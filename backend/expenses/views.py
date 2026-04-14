@@ -1,7 +1,9 @@
 from django.db.models import ProtectedError
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
-from .models import ChiPhi, ThuNhap, Loai
+from rest_framework.views import APIView
+from rest_framework.parsers import MultiPartParser, FormParser
+from .models import ChiPhi, ThuNhap, Loai, Profile
 from .serializers import ChiPhiSerializer, ThuNhapSerializer, LoaiSerializer
 
 class ThuNhapViewSet(viewsets.ModelViewSet):
@@ -51,3 +53,29 @@ class LoaiViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+class UserProfileView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]  # Bắt buộc có dòng này
+
+    def get(self, request):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        avatar_url = request.build_absolute_uri(profile.avatar.url) if profile.avatar else ''
+        return Response({
+            'username': request.user.username,
+            'email': request.user.email,
+            'avatar_url': avatar_url,
+        }, status=200)
+
+    def post(self, request):
+        avatar_file = request.FILES.get('avatar')
+        if avatar_file:
+            profile, _ = Profile.objects.get_or_create(user=request.user)
+            profile.avatar = avatar_file
+            profile.save()
+            avatar_url = request.build_absolute_uri(profile.avatar.url) if profile.avatar else ''
+            return Response({
+                "message": "Thành công",
+                "avatar_url": avatar_url,
+            }, status=200)
+        return Response({"error": "Không có file"}, status=400)

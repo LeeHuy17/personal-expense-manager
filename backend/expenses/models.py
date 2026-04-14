@@ -1,7 +1,10 @@
+from django.conf import settings
 from django.db import models
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
-from django.contrib.auth.models import User as AuthUser
+from django.contrib.auth import get_user_model
+
+AuthUser = get_user_model()
 
 
 @receiver(post_save, sender=AuthUser)
@@ -51,6 +54,15 @@ class User(models.Model):
     def __str__(self):
         return self.username
 
+# ===================== PROFILE =====================
+class Profile(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
+    bio = models.TextField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Profile of {self.user.username}"
+
 # ===================== LOAI (Categories) =====================
 class Loai(models.Model):
     loaiId = models.AutoField(primary_key=True)
@@ -65,7 +77,7 @@ class Loai(models.Model):
     color = models.CharField(max_length=7, default='#64748b')  # Màu sắc hex
     
     user = models.ForeignKey(
-        AuthUser,
+        settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='categories',
         null=True,
@@ -80,7 +92,7 @@ class ThuNhap(models.Model):
     incomeId = models.AutoField(primary_key=True)
     
     user = models.ForeignKey(
-        AuthUser, 
+        settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         db_column='userId',
         related_name='thu_nhaps'
@@ -108,7 +120,7 @@ class ChiPhi(models.Model):
     chiPhiId = models.AutoField(primary_key=True) # Đặt tên đồng bộ với incomeId
 
     user = models.ForeignKey(
-        AuthUser, 
+        settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         db_column='userId',
         related_name='chi_phis' # Thêm related_name để dễ truy vấn ngược
