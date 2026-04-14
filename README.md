@@ -12,11 +12,11 @@ Dự án hiện đang được triển khai với các nhánh tính năng (featu
 | `feature/search-filter` | Lọc và tìm kiếm giao dịch thông minh | Đang phát triển |
 | `feature/pagination` | Phân trang danh sách thu/chi | Đang phát triển |
 | `feature/backend-ui` | Quản lý giao diện backend (Admin/Dashboard) | Đang phát triển |
-| `feature/ai-advisor` | Tích hợp AI tư vấn tài chính | Đang chờ |
-| `feature/ai-integration` | Kết nối API AI Studio | Đang chờ |
-| `feature/category-management` | Quản lý danh mục thu/chi | Đang chờ |
-| `feature/expense-mgmt` | Quản lý các khoản chi tiêu | Đang chờ |
-| `feature/income-mgmt` | Quản lý các nguồn thu nhập | Đang chờ |
+| `feature/ai-advisor` | Tích hợp AI tư vấn tài chính | Đã hoàn thành |
+| `feature/ai-integration` | Kết nối API AI Studio | Đã hoàn thành |
+| `feature/category-management` | Quản lý danh mục thu/chi | Đã hoàn thành |
+| `feature/expense-mgmt` | Quản lý các khoản chi tiêu | Đã hoàn thành |
+| `feature/income-mgmt` | Quản lý các nguồn thu nhập | Đã hoàn thành |
 
 ---
 
