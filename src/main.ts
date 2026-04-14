@@ -62,67 +62,208 @@ function initAuthUI() {
 (window as any).initAuthUI = initAuthUI;
 
 // ============================================
-// GLOBAL NAVBAR UPDATE FUNCTION
+// HÀM CẬP NHẬT THANH ĐIỀU HƯỚNG (NAVBAR)
 // ============================================
-// Updates visibility of login/logout buttons and user greeting
+// Cập nhật trạng thái hiển thị của các nút đăng nhập/đăng xuất và thông tin người dùng
+
+function updateUserLogo(): void {
+    const savedAvatar = localStorage.getItem('userAvatar');
+    const username = localStorage.getItem('username') || 'U';
+    const userLogo = document.querySelector('#user-btn .bg-orange-500') as HTMLElement | null;
+
+    if (!userLogo) return;
+
+    if (savedAvatar) {
+        userLogo.innerHTML = `<img src="${savedAvatar}" class="w-full h-full rounded-xl object-cover">`;
+    } else {
+        const initials = username.trim().charAt(0).toUpperCase() || 'U';
+        userLogo.innerHTML = initials;
+    }
+}
 
 function updateNavbar(): void {
-    console.log("🔘 [GLOBAL] updateNavbar() called");
+    console.log("🔘 [GLOBAL] Đang chạy updateNavbar()...");
     
+    // Lấy trạng thái đăng nhập từ bộ nhớ
     const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+    const username = localStorage.getItem('username');
+    
+    // Các phần tử DOM
     const loggedOutButtons = document.getElementById('logged-out-buttons');
     const logoutBtn = document.getElementById('dropdown-logout-btn');
+    const profileBtn = document.getElementById('dropdown-profile-btn'); // Nút Profile mới
     const userGreeting = document.getElementById('user-greeting');
-    const username = localStorage.getItem('username');
 
-    console.log("🔘 [GLOBAL] Navbar state:", {
-        isLoggedIn,
-        username,
-        loggedOutButtons_exists: !!loggedOutButtons,
-        logoutBtn_exists: !!logoutBtn,
-        userGreeting_exists: !!userGreeting
-    });
+    console.log("🔘 [GLOBAL] Trạng thái hiện tại:", { isLoggedIn, username });
 
     if (isLoggedIn) {
-        console.log("✅ [GLOBAL] User is logged in - Hiding login buttons, showing logout");
-        // Hide login/register buttons
+        console.log("✅ [GLOBAL] Người dùng đã đăng nhập - Ẩn nút đăng nhập, hiện nút xuất/profile");
+        
+        // Ẩn nhóm nút Đăng nhập/Đăng ký
         if (loggedOutButtons) {
             loggedOutButtons.style.setProperty('display', 'none', 'important');
             loggedOutButtons.classList.add('hidden');
         }
         
-        // Show logout button
+        // Hiện nút Đăng xuất
         if (logoutBtn) {
             logoutBtn.style.setProperty('display', 'flex', 'important');
             logoutBtn.classList.remove('hidden');
         }
+
+        // HIỆN NÚT THÔNG TIN CÁ NHÂN (PROFILE)
+        if (profileBtn) {
+            profileBtn.style.setProperty('display', 'flex', 'important');
+            profileBtn.classList.remove('hidden');
+        }
         
-        // Update greeting
+        // Cập nhật tên chào mừng
         if (userGreeting && username) {
             userGreeting.textContent = `Chào ${username}!`;
-            console.log(`✅ [GLOBAL] User greeting updated to: Chào ${username}!`);
         }
+
+        updateUserLogo();
     } else {
-        console.log("📍 [GLOBAL] User is NOT logged in - Showing login buttons, hiding logout");
-        // Show login/register buttons
+        console.log("📍 [GLOBAL] Người dùng chưa đăng nhập - Hiện nút đăng nhập, ẩn nút xuất/profile");
+        
+        // Hiện nhóm nút Đăng nhập/Đăng ký
         if (loggedOutButtons) {
             loggedOutButtons.style.setProperty('display', 'flex', 'important');
             loggedOutButtons.classList.remove('hidden');
         }
         
-        // Hide logout button
+        // Ẩn nút Đăng xuất
         if (logoutBtn) {
             logoutBtn.style.setProperty('display', 'none', 'important');
             logoutBtn.classList.add('hidden');
         }
+
+        // ẨN NÚT THÔNG TIN CÁ NHÂN (PROFILE)
+        if (profileBtn) {
+            profileBtn.style.setProperty('display', 'none', 'important');
+            profileBtn.classList.add('hidden');
+        }
         
-        // Reset greeting
+        // Đặt lại chào mừng mặc định
         if (userGreeting) {
             userGreeting.textContent = 'Chào user!';
-            console.log("✅ [GLOBAL] User greeting reset to: Chào user!");
         }
     }
 }
+
+async function loadProfileData(): Promise<void> {
+    console.log('🔍 loadProfileData() called');
+    const usernameEl = document.getElementById('profileUsername');
+    const emailEl = document.getElementById('profileEmail');
+    const avatarPreview = document.getElementById('avatarPreview') as HTMLImageElement | null;
+    const savedAvatar = localStorage.getItem('userAvatar');
+    const savedUsername = localStorage.getItem('username');
+    const savedEmail = localStorage.getItem('email');
+
+    console.log('🔍 profileUsername element:', usernameEl);
+    console.log('🔍 profileEmail element:', emailEl);
+    console.log('🔍 avatarPreview element:', avatarPreview);
+    console.log('🔍 saved values:', { savedUsername, savedEmail, savedAvatar });
+
+    const apiBase = (import.meta.env.VITE_API_BASE as string) || 'http://127.0.0.1:8000';
+    const profileUrl = `${apiBase.replace(/\/$/, '')}/api/profile/`;
+    const token = localStorage.getItem('accessToken');
+
+    if (usernameEl) {
+        usernameEl.textContent = savedUsername || 'Người dùng';
+    }
+    if (emailEl) {
+        emailEl.textContent = savedEmail || 'Chưa cập nhật';
+    }
+    if (savedAvatar && avatarPreview) {
+        avatarPreview.src = savedAvatar;
+        updateUserLogo();
+    }
+
+    if (!token) {
+        console.warn('⚠️ No auth token available for profile fetch');
+        return;
+    }
+
+    try {
+        const response = await fetch(profileUrl, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Token ${token}`,
+                'Accept': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.warn('⚠️ Profile fetch failed', response.status, errorText);
+            return;
+        }
+
+        const profileData = await response.json();
+        console.log('✅ Profile data loaded', profileData);
+
+        if (usernameEl && profileData.username) {
+            usernameEl.textContent = profileData.username;
+        }
+        if (emailEl && profileData.email) {
+            emailEl.textContent = profileData.email;
+        }
+        if (avatarPreview && profileData.avatar_url) {
+            avatarPreview.src = profileData.avatar_url;
+            localStorage.setItem('userAvatar', profileData.avatar_url);
+            updateUserLogo();
+        }
+    } catch (error) {
+        console.error('❌ Error fetching profile data:', error);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. Kiểm tra UI khi load trang
+    updateNavbar();
+
+    // 2. Gán sự kiện click cho nút Profile Drawer
+    const profileBtn = document.getElementById('dropdown-profile-btn');
+    const drawerOverlay = document.getElementById('overlay');
+    const profileDrawer = document.getElementById('profileDrawer');
+    const closeDrawerBtn = document.getElementById('btnCloseDrawer');
+
+    const openDrawer = () => {
+        if (!drawerOverlay || !profileDrawer) return;
+        drawerOverlay.classList.remove('hidden');
+        setTimeout(() => drawerOverlay.classList.add('opacity-100'), 10);
+        profileDrawer.style.right = '0px';
+    };
+
+    const closeDrawer = () => {
+        if (!drawerOverlay || !profileDrawer) return;
+        profileDrawer.style.right = '-400px';
+        drawerOverlay.classList.remove('opacity-100');
+        setTimeout(() => drawerOverlay.classList.add('hidden'), 300);
+    };
+
+    if (profileBtn) {
+        profileBtn.onclick = async (e) => {
+            e.preventDefault();
+            await loadProfileData();
+            openDrawer();
+        };
+    }
+
+    if (closeDrawerBtn) {
+        closeDrawerBtn.onclick = closeDrawer;
+    }
+
+    if (drawerOverlay) {
+        drawerOverlay.onclick = (event) => {
+            if (event.target === drawerOverlay) {
+                closeDrawer();
+            }
+        };
+    }
+});
+
 
 // Make it global so it can be called from anywhere
 (window as any).updateNavbar = updateNavbar;
@@ -137,6 +278,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Update navbar buttons immediately
     console.log("🔘 Running updateNavbar() to set correct navbar state...");
     updateNavbar();
+    if (localStorage.getItem('isLoggedIn') === 'true') {
+        // Nếu có token, đồng bộ avatar từ API hoặc localStorage ngay khi tải trang
+        loadProfileData().catch((error) => {
+            console.warn('⚠️ Failed to refresh profile avatar on load:', error);
+        });
+    }
     
     // Khởi tạo trang reset password nếu cần
     initResetPasswordPage();
@@ -239,6 +386,143 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log("🎯 do-forgot-btn clicked via global listener");
         }
     });
+
+    // 1. Quản lý ẩn/hiện Menu Dropdown
+    const userGreeting = document.getElementById('user-greeting');
+    const userMenu = document.getElementById('userMenu');
+
+    if (userGreeting && userMenu) {
+        userGreeting.onclick = (e) => {
+            e.stopPropagation();
+            userMenu.classList.toggle('hidden');
+        };
+    }
+
+    // Close menu when clicking outside
+    document.addEventListener('click', () => {
+        if (userMenu && !userMenu.classList.contains('hidden')) {
+            userMenu.classList.add('hidden');
+        }
+    });
+
+    // 2. Quản lý Modal Profile
+    const btnOpenProfile = document.getElementById('btnOpenProfile');
+    const profileModal = document.getElementById('profileModal');
+    const btnCloseModal = document.getElementById('btnCloseModal');
+    const btnLogout = document.getElementById('btnLogout');
+
+    if (btnOpenProfile) {
+        btnOpenProfile.onclick = (e) => {
+            e.preventDefault();
+            if (profileModal) profileModal.classList.remove('hidden');
+            if (userMenu) userMenu.classList.add('hidden'); // Đóng menu sau khi chọn
+        };
+    }
+
+    if (btnCloseModal) {
+        btnCloseModal.onclick = () => {
+            if (profileModal) profileModal.classList.add('hidden');
+        };
+    }
+
+    if (btnLogout) {
+        btnLogout.onclick = (e) => {
+            e.preventDefault();
+            if (window.expenseManager && window.expenseManager.handleLogoutClick) {
+                window.expenseManager.handleLogoutClick();
+            }
+        };
+    }
+
+    // 3. Xem trước ảnh khi chọn (Preview)
+    const fileAvatar = document.getElementById('fileAvatar') as HTMLInputElement;
+    const avatarPreview = document.getElementById('avatarPreview') as HTMLImageElement;
+
+    if (fileAvatar) {
+        fileAvatar.onchange = () => {
+            const file = fileAvatar.files ? fileAvatar.files[0] : null;
+            if (file && avatarPreview) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    if (e.target && avatarPreview) {
+                        avatarPreview.src = e.target.result as string;
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+        };
+    }
+
+    // 4. Gửi dữ liệu bằng FormData (Phương pháp chuẩn Huy chọn)
+    const btnSaveAvatar = document.getElementById('btnSaveAvatar');
+
+    if (btnSaveAvatar) {
+        btnSaveAvatar.onclick = async () => {
+            const file = fileAvatar && fileAvatar.files ? fileAvatar.files[0] : null;
+            const token = localStorage.getItem('accessToken');
+            const avatarPreviewEl = document.getElementById('avatarPreview') as HTMLImageElement | null;
+
+            if (!file) {
+                alert("Bạn chưa chọn ảnh mới!");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('avatar', file);
+
+            if (!token) {
+                alert('Không tìm thấy token xác thực. Vui lòng đăng nhập lại.');
+                return;
+            }
+
+            const apiBase = (import.meta.env.VITE_API_BASE as string) || 'http://127.0.0.1:8000';
+            const profileUrl = `${apiBase.replace(/\/$/, '')}/api/profile/`;
+
+            try {
+                    const response = await fetch(profileUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Token ${token}`,
+                        'Accept': 'application/json'
+                    },
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const contentType = response.headers.get('Content-Type') || '';
+                    let data: any = {};
+                    if (contentType.includes('application/json')) {
+                        data = await response.json();
+                    }
+                    const newAvatarUrl = data.avatar_url || data.avatar || '';
+                    if (newAvatarUrl) {
+                        localStorage.setItem('userAvatar', newAvatarUrl);
+                        if (avatarPreviewEl) {
+                            avatarPreviewEl.src = newAvatarUrl;
+                        }
+                        const userLogo = document.querySelector('#user-btn .bg-orange-500') as HTMLElement | null;
+                        if (userLogo) {
+                            userLogo.innerHTML = `<img src="${newAvatarUrl}" class="w-full h-full rounded-xl object-cover">`;
+                        }
+                    }
+                    alert("Đã cập nhật ảnh thành công!");
+                } else {
+                    const contentType = response.headers.get('Content-Type') || '';
+                    if (contentType.includes('application/json')) {
+                        const error = await response.json();
+                        alert("Lỗi: " + (error.detail || error.error || "Không thể lưu ảnh"));
+                    } else {
+                        const text = await response.text();
+                        alert(`Lỗi server: ${text}`);
+                    }
+                }
+            } catch (err) {
+                const errorMessage = err instanceof Error ? err.message : String(err);
+                console.error("Lỗi upload:", err);
+                alert(`Không thể kết nối tới Server Django!\nKiểm tra server backend đang chạy và truy cập được tại ${profileUrl}.\nChi tiết: ${errorMessage}`);
+            }
+        };
+    }
 });
 
 // Export global functions for onclick handlers
@@ -512,7 +796,7 @@ class ExpenseManager {
     }
   }
   
-  private handleLogoutClick = () => {
+   handleLogoutClick = () => {
       console.log('🔐 Logout button clicked');
       
       // 1. Clear all session data FIRST - before any reload

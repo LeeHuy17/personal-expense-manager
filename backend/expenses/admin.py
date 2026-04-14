@@ -1,5 +1,9 @@
 from django.contrib import admin
-from .models import User, Loai, ThuNhap, ChiPhi, BaoCao
+from .models import User, Loai, ThuNhap, ChiPhi, BaoCao, Profile
+
+@admin.register(Profile)
+class ProfileAdmin(admin.ModelAdmin):
+    list_display = ('user', 'avatar')
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
