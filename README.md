@@ -1,41 +1,33 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+# 💰 Quản lý Chi tiêu Thông minh (Backend & Core Logic)
 
-# 💰 Quản lý Chi tiêu Thông minh (AI Personal Expense Manager)
-### Dự án Fullstack: Frontend AI Studio + Backend Django (MySQL)
-</div>
+Đây là nhánh **`developers`** - trung tâm tích hợp và kiểm thử các tính năng mới trước khi merge vào `main`.
 
----
+## 🌳 Cấu trúc Nhánh & Tính năng
+Dự án hiện đang được triển khai với các nhánh tính năng (feature branches) sau:
 
-## 📖 Giới thiệu
-Dự án cung cấp giải pháp quản lý tài chính cá nhân toàn diện, kết hợp sức mạnh của trí tuệ nhân tạo (AI) để phân tích thói quen tiêu dùng và đưa ra lời khuyên tài chính thông minh.
-
-**Xem ứng dụng tại AI Studio:** [Tại đây](https://ai.studio/apps/37d6ead8-45bb-44b8-9727-41306a57b764)
-
----
-
-## 🌳 Cấu trúc Nhánh (Git Branching)
-Dự án được quản lý theo mô hình Git Flow chuyên nghiệp:
-
-- **`main`**: Nhánh chính thức, chứa mã nguồn ổn định nhất.
-- **`developers`**: Nhánh trung gian để tổng hợp và kiểm tra code từ các thành viên.
-- **Các nhánh tính năng (Features):**
-  - `feature/auth-system`: Hệ thống Đăng ký, Đăng nhập, Quên mật khẩu.
-  - `feature/income-mgmt`: Quản lý các nguồn thu nhập.
-  - `feature/expense-mgmt`: Quản lý các khoản chi tiêu hàng ngày.
-  - `feature/stats-report`: Xử lý dữ liệu thống kê, báo cáo thu - chi.
-  - `feature/ai-integration`: Tích hợp Chatbot AI và biểu đồ phân tích thông minh.
+| Nhánh (Branch) | Chức năng chính | Trạng thái |
+| :--- | :--- | :--- |
+| `feature/user-avatar-upload` | Cập nhật & hiển thị ảnh đại diện người dùng | Đã hoàn thành |
+| `feature/shared-fund` | Tạo và quản lý quỹ chung giữa các user | Đang phát triển |
+| `feature/search-filter` | Lọc và tìm kiếm giao dịch thông minh | Đang phát triển |
+| `feature/pagination` | Phân trang danh sách thu/chi | Đang phát triển |
+| `feature/backend-ui` | Quản lý giao diện backend (Admin/Dashboard) | Đang phát triển |
+| `feature/ai-advisor` | Tích hợp AI tư vấn tài chính | Đang chờ |
+| `feature/ai-integration` | Kết nối API AI Studio | Đang chờ |
+| `feature/category-management` | Quản lý danh mục thu/chi | Đang chờ |
+| `feature/expense-mgmt` | Quản lý các khoản chi tiêu | Đang chờ |
+| `feature/income-mgmt` | Quản lý các nguồn thu nhập | Đang chờ |
 
 ---
 
-## 🚀 Hướng dẫn Chạy Dự án (Local)
+## 🛠 Quy trình làm việc (Git Workflow)
+1. **Pull mới nhất**: Luôn thực hiện `git pull origin developers` trước khi bắt đầu.
+2. **Tạo nhánh**: Tạo nhánh mới từ `developers` với quy tắc `feature/<tên-chức-năng>`.
+3. **Commit**: Ghi chú commit chi tiết theo chuẩn.
+4. **Merge**: Sau khi hoàn thành và test, thực hiện Pull Request để merge vào nhánh `developers`.
 
-### 1. Yêu cầu hệ thống
-* **Node.js** (Phiên bản mới nhất)
-* **Python 3.12+**
-* **MySQL Workbench**
-
-### 2. Cấu hình Frontend (AI Studio)
-1. Cài đặt các thư viện Node.js:
-   ```powershell
-   npm install
+## ⚙️ Hướng dẫn Cấu hình Backend (Local)
+1. **Cài đặt môi trường**: `python -m venv venv` và kích hoạt.
+2. **Cài đặt thư viện**: `pip install -r requirements.txt`.
+3. **Database**: Đảm bảo MySQL đã chạy với schema `personal_expense_manager`.
+4. **Chạy server**: `python manage.py runserver`.
