@@ -1,7 +1,10 @@
+from django.conf import settings
 from django.db import models
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
-from django.contrib.auth.models import User as AuthUser
+from django.contrib.auth import get_user_model
+
+AuthUser = get_user_model()
 
 
 @receiver(post_save, sender=AuthUser)
@@ -51,6 +54,15 @@ class User(models.Model):
     def __str__(self):
         return self.username
 
+# ===================== PROFILE =====================
+class Profile(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
+    bio = models.TextField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Profile of {self.user.username}"
+
 # ===================== LOAI (Categories) =====================
 class Loai(models.Model):
     loaiId = models.AutoField(primary_key=True)
@@ -61,6 +73,16 @@ class Loai(models.Model):
         ('expense', 'Chi phí'),
     ]
     type = models.CharField(max_length=50, choices=TYPE_CHOICES)
+    icon = models.CharField(max_length=50, default='plus')  # Biểu tượng từ Lucide icons
+    color = models.CharField(max_length=7, default='#64748b')  # Màu sắc hex
+    
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='categories',
+        null=True,
+        blank=True
+    )
 
     def __str__(self):
         return f"{self.tenLoai} ({self.get_type_display()})"
@@ -70,7 +92,7 @@ class ThuNhap(models.Model):
     incomeId = models.AutoField(primary_key=True)
     
     user = models.ForeignKey(
-        AuthUser, 
+        settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         db_column='userId',
         related_name='thu_nhaps'
@@ -79,7 +101,7 @@ class ThuNhap(models.Model):
     # 1. Thêm khóa ngoại tới Loai (Rất quan trọng để biết thu nhập từ đâu: Lương/Thưởng)
     loai = models.ForeignKey(
         Loai,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         db_column='loaiId',
         null=True, # Cho phép null tạm thời để tránh lỗi migrate dữ liệu cũ
         blank=True
@@ -98,7 +120,7 @@ class ChiPhi(models.Model):
     chiPhiId = models.AutoField(primary_key=True) # Đặt tên đồng bộ với incomeId
 
     user = models.ForeignKey(
-        AuthUser, 
+        settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         db_column='userId',
         related_name='chi_phis' # Thêm related_name để dễ truy vấn ngược
@@ -106,7 +128,7 @@ class ChiPhi(models.Model):
 
     loai = models.ForeignKey(
         Loai,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         db_column='loaiId',
         null=True, # Cho phép null để linh hoạt giống ThuNhap
         blank=True

@@ -184,6 +184,9 @@
                   </button>
                   <div class="h-px bg-slate-100 dark:bg-slate-800 my-1"></div>
                 </div>
+                <button id="dropdown-profile-btn" class="hidden w-full text-left px-4 py-2 text-sm font-medium hover:bg-orange-50 dark:hover:bg-slate-800 rounded-xl transition-colors flex items-center gap-2">
+                    <i data-lucide="user" class="w-4 h-4"></i> Thông tin cá nhân
+                </button>
                 <button id="dropdown-logout-btn" class="hidden w-full text-left px-4 py-2 text-sm font-medium text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition-colors flex items-center gap-2">
                   <i data-lucide="log-out" class="w-4 h-4"></i> Đăng xuất
                 </button>
@@ -440,7 +443,7 @@
 
                 <div class="space-y-2">
                   <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Danh mục</label>
-                  <select id="category" class="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-orange-500 transition-all outline-none text-sm font-medium appearance-none cursor-pointer">
+                  <select id="transaction-category" class="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-transparent focus:bg-white dark:focus:bg-slate-900 focus:border-orange-500 transition-all outline-none text-sm font-medium appearance-none cursor-pointer">
                     <!-- Dynamic categories -->
                   </select>
                 </div>
@@ -486,7 +489,7 @@
     <!-- Modals (Hidden by default) -->
     <div id="modal-overlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4">
       <!-- Auth Modal -->
-      <div id="auth-modal" class="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 w-full max-w-lg animate-in fade-in zoom-in duration-300 shadow-2xl shadow-orange-200/30 dark:shadow-none border border-orange-50 dark:border-slate-800 relative overflow-y-auto">
+      <div id="auth-modal" class="hidden bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 w-full max-w-lg animate-in fade-in zoom-in duration-300 shadow-2xl shadow-orange-200/30 dark:shadow-none border border-orange-50 dark:border-slate-800 relative overflow-y-auto">
         <!-- Auth Tabs -->
         <div id="auth-tabs-container" class="flex p-1 bg-slate-50 dark:bg-slate-800 rounded-2xl mb-8 relative">
           <button id="tab-login" class="flex-1 py-2.5 rounded-xl text-xs font-bold transition-all z-10 bg-white dark:bg-slate-900 shadow-sm text-orange-600">Đăng nhập</button>
@@ -606,7 +609,25 @@
         <div class="space-y-4 p-4 bg-orange-50/50 dark:bg-slate-800/50 rounded-3xl border border-orange-100 dark:border-slate-700">
           <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Thêm danh mục mới</label>
           <div class="space-y-3">
-            <input type="text" id="new-category-input" placeholder="Tên danh mục..." class="w-full px-4 py-3 rounded-xl bg-white dark:bg-slate-900 outline-none border-2 border-transparent focus:border-orange-500 hover:border-orange-200 dark:hover:border-slate-700 transition-all text-sm text-slate-900 dark:text-white shadow-sm">
+            <div class="mb-4">
+                <label class="text-xs text-gray-400 uppercase font-bold">Phân loại</label>
+                <div class="flex gap-2 mt-2">
+                    <button id="btn-type-income" onclick="window.expenseManager.setCategoryType('Thu nhập')" 
+                        class="flex-1 py-2 rounded-xl border-2 transition-all font-medium border-gray-100 text-gray-400">
+                        Thu nhập
+                    </button>
+                    <button id="btn-type-expense" onclick="window.expenseManager.setCategoryType('Chi tiêu')" 
+                        class="flex-1 py-2 rounded-xl border-2 transition-all font-medium border-gray-100 text-gray-400">
+                        Chi tiêu
+                    </button>
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label class="text-xs text-gray-400 uppercase font-bold">Tên danh mục</label>
+                <input type="text" id="new-category-input" placeholder="Ví dụ: Lương, Ăn uống..." 
+                    class="w-full mt-2 p-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-orange-500 outline-none">
+            </div>
             
             <div class="grid grid-cols-2 gap-3">
               <div class="space-y-1">
@@ -721,7 +742,31 @@
     <!-- Toast Notification -->
     <div id="toast-container" class="fixed bottom-8 right-8 z-[100] space-y-4"></div>
 
+    <div id="overlay" class="hidden fixed inset-0 bg-black/50 z-[90] transition-opacity duration-300 opacity-0"></div>
+
+    <div id="profileDrawer" class="fixed top-0 right-[-400px] w-[400px] h-full bg-white shadow-2xl z-[100] transition-all duration-500 ease-in-out p-6 overflow-y-auto">
+        <button id="btnCloseDrawer" class="mb-4 text-gray-500 hover:text-black">Đóng</button>
+        <h2 class="text-xl font-bold mb-6">Thông tin cá nhân</h2>
+        
+        <div class="flex flex-col items-center mb-6">
+            <img id="avatarPreview" src="default-avatar.png" class="w-32 h-32 rounded-full object-cover border-4 border-orange-100 shadow-md mb-4">
+            <input type="file" id="fileAvatar" accept="image/*" class="hidden">
+            <button onclick="document.getElementById('fileAvatar').click()" class="text-sm text-orange-600 font-medium hover:underline">
+                Thay đổi ảnh đại diện
+            </button>
+        </div>
+
+        <div class="space-y-4">
+            <p><strong>Tên người dùng:</strong> <span id="profileUsername">...</span></p>
+            <p><strong>Email:</strong> <span id="profileEmail">...</span></p>
+        </div>
+
+        <button id="btnSaveAvatar" class="w-full mt-8 bg-orange-500 text-white py-2 rounded-xl hover:bg-orange-600 transition">
+            Lưu thay đổi
+        </button>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
-  </body>
+  </body> 
 </html>
 

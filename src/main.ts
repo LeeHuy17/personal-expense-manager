@@ -64,67 +64,208 @@ function initAuthUI() {
 (window as any).initAuthUI = initAuthUI;
 
 // ============================================
-// GLOBAL NAVBAR UPDATE FUNCTION
+// HÀM CẬP NHẬT THANH ĐIỀU HƯỚNG (NAVBAR)
 // ============================================
-// Updates visibility of login/logout buttons and user greeting
+// Cập nhật trạng thái hiển thị của các nút đăng nhập/đăng xuất và thông tin người dùng
+
+function updateUserLogo(): void {
+    const savedAvatar = localStorage.getItem('userAvatar');
+    const username = localStorage.getItem('username') || 'U';
+    const userLogo = document.querySelector('#user-btn .bg-orange-500') as HTMLElement | null;
+
+    if (!userLogo) return;
+
+    if (savedAvatar) {
+        userLogo.innerHTML = `<img src="${savedAvatar}" class="w-full h-full rounded-xl object-cover">`;
+    } else {
+        const initials = username.trim().charAt(0).toUpperCase() || 'U';
+        userLogo.innerHTML = initials;
+    }
+}
 
 function updateNavbar(): void {
-    console.log("🔘 [GLOBAL] updateNavbar() called");
+    console.log("🔘 [GLOBAL] Đang chạy updateNavbar()...");
     
+    // Lấy trạng thái đăng nhập từ bộ nhớ
     const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+    const username = localStorage.getItem('username');
+    
+    // Các phần tử DOM
     const loggedOutButtons = document.getElementById('logged-out-buttons');
     const logoutBtn = document.getElementById('dropdown-logout-btn');
+    const profileBtn = document.getElementById('dropdown-profile-btn'); // Nút Profile mới
     const userGreeting = document.getElementById('user-greeting');
-    const username = localStorage.getItem('username');
 
-    console.log("🔘 [GLOBAL] Navbar state:", {
-        isLoggedIn,
-        username,
-        loggedOutButtons_exists: !!loggedOutButtons,
-        logoutBtn_exists: !!logoutBtn,
-        userGreeting_exists: !!userGreeting
-    });
+    console.log("🔘 [GLOBAL] Trạng thái hiện tại:", { isLoggedIn, username });
 
     if (isLoggedIn) {
-        console.log("✅ [GLOBAL] User is logged in - Hiding login buttons, showing logout");
-        // Hide login/register buttons
+        console.log("✅ [GLOBAL] Người dùng đã đăng nhập - Ẩn nút đăng nhập, hiện nút xuất/profile");
+        
+        // Ẩn nhóm nút Đăng nhập/Đăng ký
         if (loggedOutButtons) {
             loggedOutButtons.style.setProperty('display', 'none', 'important');
             loggedOutButtons.classList.add('hidden');
         }
         
-        // Show logout button
+        // Hiện nút Đăng xuất
         if (logoutBtn) {
             logoutBtn.style.setProperty('display', 'flex', 'important');
             logoutBtn.classList.remove('hidden');
         }
+
+        // HIỆN NÚT THÔNG TIN CÁ NHÂN (PROFILE)
+        if (profileBtn) {
+            profileBtn.style.setProperty('display', 'flex', 'important');
+            profileBtn.classList.remove('hidden');
+        }
         
-        // Update greeting
+        // Cập nhật tên chào mừng
         if (userGreeting && username) {
             userGreeting.textContent = `Chào ${username}!`;
-            console.log(`✅ [GLOBAL] User greeting updated to: Chào ${username}!`);
         }
+
+        updateUserLogo();
     } else {
-        console.log("📍 [GLOBAL] User is NOT logged in - Showing login buttons, hiding logout");
-        // Show login/register buttons
+        console.log("📍 [GLOBAL] Người dùng chưa đăng nhập - Hiện nút đăng nhập, ẩn nút xuất/profile");
+        
+        // Hiện nhóm nút Đăng nhập/Đăng ký
         if (loggedOutButtons) {
             loggedOutButtons.style.setProperty('display', 'flex', 'important');
             loggedOutButtons.classList.remove('hidden');
         }
         
-        // Hide logout button
+        // Ẩn nút Đăng xuất
         if (logoutBtn) {
             logoutBtn.style.setProperty('display', 'none', 'important');
             logoutBtn.classList.add('hidden');
         }
+
+        // ẨN NÚT THÔNG TIN CÁ NHÂN (PROFILE)
+        if (profileBtn) {
+            profileBtn.style.setProperty('display', 'none', 'important');
+            profileBtn.classList.add('hidden');
+        }
         
-        // Reset greeting
+        // Đặt lại chào mừng mặc định
         if (userGreeting) {
             userGreeting.textContent = 'Chào user!';
-            console.log("✅ [GLOBAL] User greeting reset to: Chào user!");
         }
     }
 }
+
+async function loadProfileData(): Promise<void> {
+    console.log('🔍 loadProfileData() called');
+    const usernameEl = document.getElementById('profileUsername');
+    const emailEl = document.getElementById('profileEmail');
+    const avatarPreview = document.getElementById('avatarPreview') as HTMLImageElement | null;
+    const savedAvatar = localStorage.getItem('userAvatar');
+    const savedUsername = localStorage.getItem('username');
+    const savedEmail = localStorage.getItem('email');
+
+    console.log('🔍 profileUsername element:', usernameEl);
+    console.log('🔍 profileEmail element:', emailEl);
+    console.log('🔍 avatarPreview element:', avatarPreview);
+    console.log('🔍 saved values:', { savedUsername, savedEmail, savedAvatar });
+
+    const apiBase = (import.meta.env.VITE_API_BASE as string) || 'http://127.0.0.1:8000';
+    const profileUrl = `${apiBase.replace(/\/$/, '')}/api/profile/`;
+    const token = localStorage.getItem('accessToken');
+
+    if (usernameEl) {
+        usernameEl.textContent = savedUsername || 'Người dùng';
+    }
+    if (emailEl) {
+        emailEl.textContent = savedEmail || 'Chưa cập nhật';
+    }
+    if (savedAvatar && avatarPreview) {
+        avatarPreview.src = savedAvatar;
+        updateUserLogo();
+    }
+
+    if (!token) {
+        console.warn('⚠️ No auth token available for profile fetch');
+        return;
+    }
+
+    try {
+        const response = await fetch(profileUrl, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Token ${token}`,
+                'Accept': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.warn('⚠️ Profile fetch failed', response.status, errorText);
+            return;
+        }
+
+        const profileData = await response.json();
+        console.log('✅ Profile data loaded', profileData);
+
+        if (usernameEl && profileData.username) {
+            usernameEl.textContent = profileData.username;
+        }
+        if (emailEl && profileData.email) {
+            emailEl.textContent = profileData.email;
+        }
+        if (avatarPreview && profileData.avatar_url) {
+            avatarPreview.src = profileData.avatar_url;
+            localStorage.setItem('userAvatar', profileData.avatar_url);
+            updateUserLogo();
+        }
+    } catch (error) {
+        console.error('❌ Error fetching profile data:', error);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. Kiểm tra UI khi load trang
+    updateNavbar();
+
+    // 2. Gán sự kiện click cho nút Profile Drawer
+    const profileBtn = document.getElementById('dropdown-profile-btn');
+    const drawerOverlay = document.getElementById('overlay');
+    const profileDrawer = document.getElementById('profileDrawer');
+    const closeDrawerBtn = document.getElementById('btnCloseDrawer');
+
+    const openDrawer = () => {
+        if (!drawerOverlay || !profileDrawer) return;
+        drawerOverlay.classList.remove('hidden');
+        setTimeout(() => drawerOverlay.classList.add('opacity-100'), 10);
+        profileDrawer.style.right = '0px';
+    };
+
+    const closeDrawer = () => {
+        if (!drawerOverlay || !profileDrawer) return;
+        profileDrawer.style.right = '-400px';
+        drawerOverlay.classList.remove('opacity-100');
+        setTimeout(() => drawerOverlay.classList.add('hidden'), 300);
+    };
+
+    if (profileBtn) {
+        profileBtn.onclick = async (e) => {
+            e.preventDefault();
+            await loadProfileData();
+            openDrawer();
+        };
+    }
+
+    if (closeDrawerBtn) {
+        closeDrawerBtn.onclick = closeDrawer;
+    }
+
+    if (drawerOverlay) {
+        drawerOverlay.onclick = (event) => {
+            if (event.target === drawerOverlay) {
+                closeDrawer();
+            }
+        };
+    }
+});
+
 
 // Make it global so it can be called from anywhere
 (window as any).updateNavbar = updateNavbar;
@@ -139,6 +280,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Update navbar buttons immediately
     console.log("🔘 Running updateNavbar() to set correct navbar state...");
     updateNavbar();
+    if (localStorage.getItem('isLoggedIn') === 'true') {
+        // Nếu có token, đồng bộ avatar từ API hoặc localStorage ngay khi tải trang
+        loadProfileData().catch((error) => {
+            console.warn('⚠️ Failed to refresh profile avatar on load:', error);
+        });
+    }
     
     // Khởi tạo trang reset password nếu cần
     initResetPasswordPage();
@@ -241,6 +388,143 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log("🎯 do-forgot-btn clicked via global listener");
         }
     });
+
+    // 1. Quản lý ẩn/hiện Menu Dropdown
+    const userGreeting = document.getElementById('user-greeting');
+    const userMenu = document.getElementById('userMenu');
+
+    if (userGreeting && userMenu) {
+        userGreeting.onclick = (e) => {
+            e.stopPropagation();
+            userMenu.classList.toggle('hidden');
+        };
+    }
+
+    // Close menu when clicking outside
+    document.addEventListener('click', () => {
+        if (userMenu && !userMenu.classList.contains('hidden')) {
+            userMenu.classList.add('hidden');
+        }
+    });
+
+    // 2. Quản lý Modal Profile
+    const btnOpenProfile = document.getElementById('btnOpenProfile');
+    const profileModal = document.getElementById('profileModal');
+    const btnCloseModal = document.getElementById('btnCloseModal');
+    const btnLogout = document.getElementById('btnLogout');
+
+    if (btnOpenProfile) {
+        btnOpenProfile.onclick = (e) => {
+            e.preventDefault();
+            if (profileModal) profileModal.classList.remove('hidden');
+            if (userMenu) userMenu.classList.add('hidden'); // Đóng menu sau khi chọn
+        };
+    }
+
+    if (btnCloseModal) {
+        btnCloseModal.onclick = () => {
+            if (profileModal) profileModal.classList.add('hidden');
+        };
+    }
+
+    if (btnLogout) {
+        btnLogout.onclick = (e) => {
+            e.preventDefault();
+            if (window.expenseManager && window.expenseManager.handleLogoutClick) {
+                window.expenseManager.handleLogoutClick();
+            }
+        };
+    }
+
+    // 3. Xem trước ảnh khi chọn (Preview)
+    const fileAvatar = document.getElementById('fileAvatar') as HTMLInputElement;
+    const avatarPreview = document.getElementById('avatarPreview') as HTMLImageElement;
+
+    if (fileAvatar) {
+        fileAvatar.onchange = () => {
+            const file = fileAvatar.files ? fileAvatar.files[0] : null;
+            if (file && avatarPreview) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    if (e.target && avatarPreview) {
+                        avatarPreview.src = e.target.result as string;
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+        };
+    }
+
+    // 4. Gửi dữ liệu bằng FormData (Phương pháp chuẩn Huy chọn)
+    const btnSaveAvatar = document.getElementById('btnSaveAvatar');
+
+    if (btnSaveAvatar) {
+        btnSaveAvatar.onclick = async () => {
+            const file = fileAvatar && fileAvatar.files ? fileAvatar.files[0] : null;
+            const token = localStorage.getItem('accessToken');
+            const avatarPreviewEl = document.getElementById('avatarPreview') as HTMLImageElement | null;
+
+            if (!file) {
+                alert("Bạn chưa chọn ảnh mới!");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('avatar', file);
+
+            if (!token) {
+                alert('Không tìm thấy token xác thực. Vui lòng đăng nhập lại.');
+                return;
+            }
+
+            const apiBase = (import.meta.env.VITE_API_BASE as string) || 'http://127.0.0.1:8000';
+            const profileUrl = `${apiBase.replace(/\/$/, '')}/api/profile/`;
+
+            try {
+                    const response = await fetch(profileUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Token ${token}`,
+                        'Accept': 'application/json'
+                    },
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const contentType = response.headers.get('Content-Type') || '';
+                    let data: any = {};
+                    if (contentType.includes('application/json')) {
+                        data = await response.json();
+                    }
+                    const newAvatarUrl = data.avatar_url || data.avatar || '';
+                    if (newAvatarUrl) {
+                        localStorage.setItem('userAvatar', newAvatarUrl);
+                        if (avatarPreviewEl) {
+                            avatarPreviewEl.src = newAvatarUrl;
+                        }
+                        const userLogo = document.querySelector('#user-btn .bg-orange-500') as HTMLElement | null;
+                        if (userLogo) {
+                            userLogo.innerHTML = `<img src="${newAvatarUrl}" class="w-full h-full rounded-xl object-cover">`;
+                        }
+                    }
+                    alert("Đã cập nhật ảnh thành công!");
+                } else {
+                    const contentType = response.headers.get('Content-Type') || '';
+                    if (contentType.includes('application/json')) {
+                        const error = await response.json();
+                        alert("Lỗi: " + (error.detail || error.error || "Không thể lưu ảnh"));
+                    } else {
+                        const text = await response.text();
+                        alert(`Lỗi server: ${text}`);
+                    }
+                }
+            } catch (err) {
+                const errorMessage = err instanceof Error ? err.message : String(err);
+                console.error("Lỗi upload:", err);
+                alert(`Không thể kết nối tới Server Django!\nKiểm tra server backend đang chạy và truy cập được tại ${profileUrl}.\nChi tiết: ${errorMessage}`);
+            }
+        };
+    }
 });
 
 // Export global functions for onclick handlers
@@ -285,7 +569,10 @@ interface Transaction {
   amount: number;
   type: 'income' | 'expense';
   category: string;
+  categoryId?: number | string;
   date: string;
+  incomeId?: number;  // 🔑 Primary key for income records
+  chiPhiId?: number;  // 🔑 Primary key for expense records
 }
 
 interface Goal {
@@ -297,21 +584,23 @@ interface Goal {
 }
 
 interface Category {
+  id: number | string;
   name: string;
   icon: string;
   color: string;
+  type: 'income' | 'expense' | 'Thu nhập' | 'Chi tiêu';
 }
 
 class ExpenseManager {
   private transactions: Transaction[] = [];
   private categories: Category[] = [
-    { name: 'Ăn uống', icon: 'utensils', color: '#f59e0b' },
-    { name: 'Di chuyển', icon: 'car', color: '#3b82f6' },
-    { name: 'Mua sắm', icon: 'shopping-bag', color: '#ec4899' },
-    { name: 'Giải trí', icon: 'gamepad-2', color: '#a855f7' },
-    { name: 'Nhà cửa', icon: 'home', color: '#10b981' },
-    { name: 'Lương', icon: 'banknote', color: '#14b8a6' },
-    { name: 'Khác', icon: 'plus', color: '#64748b' }
+    { id: 'default-1', name: 'Ăn uống', icon: 'utensils', color: '#f59e0b', type: 'Chi tiêu' },
+    { id: 'default-2', name: 'Di chuyển', icon: 'car', color: '#3b82f6', type: 'Chi tiêu' },
+    { id: 'default-3', name: 'Mua sắm', icon: 'shopping-bag', color: '#ec4899', type: 'Chi tiêu' },
+    { id: 'default-4', name: 'Giải trí', icon: 'gamepad-2', color: '#a855f7', type: 'Chi tiêu' },
+    { id: 'default-5', name: 'Nhà cửa', icon: 'home', color: '#10b981', type: 'Chi tiêu' },
+    { id: 'default-6', name: 'Lương', icon: 'banknote', color: '#14b8a6', type: 'Thu nhập' },
+    { id: 'default-7', name: 'Khác', icon: 'plus', color: '#64748b', type: 'Chi tiêu' }
   ];
   private categoryBudgets: Record<string, number> = {};
   private goals: Goal[] = [];
@@ -319,6 +608,7 @@ class ExpenseManager {
   private isDarkMode: boolean = false;
   private isIncognito: boolean = false;
   private isLoggedIn: boolean = false;
+  private currentCategoryType: 'Thu nhập' | 'Chi tiêu' = 'Chi tiêu';
 
   // Elements
   private landingView: HTMLElement;
@@ -376,12 +666,22 @@ class ExpenseManager {
     this.isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
     console.log("🔍 ExpenseManager Constructor: isLoggedIn =", this.isLoggedIn);
     
-    if (this.transactions.length === 0 && !this.isLoggedIn) {
-      this.addMockData();
+    // Load categories from backend if logged in
+    if (this.isLoggedIn) {
+      this.loadCategories()
+        .catch((error) => console.error('Lỗi khi tải danh mục:', error))
+        .finally(() => {
+          this.renderCategoryDropdown(this.currentCategoryType);
+          this.loadAndRender();
+        });
+    } else {
+      if (this.transactions.length === 0) {
+        this.addMockData();
+      }
+      this.renderCategoryDropdown(this.currentCategoryType);
+      this.loadAndRender();
     }
     
-    // Load real data and render UI
-    this.loadAndRender();
     this.getAIAdvice();
     this.toggleView();
     
@@ -498,7 +798,7 @@ class ExpenseManager {
     }
   }
   
-  private handleLogoutClick = () => {
+   handleLogoutClick = () => {
       console.log('🔐 Logout button clicked');
       
       // 1. Clear all session data FIRST - before any reload
@@ -580,6 +880,10 @@ class ExpenseManager {
       e.preventDefault();
       this.addTransaction();
     });
+
+    // Type selection buttons
+    document.getElementById('type-expense-btn')?.addEventListener('click', () => this.setTransactionType('expense'));
+    document.getElementById('type-income-btn')?.addEventListener('click', () => this.setTransactionType('income'));
 
     document.getElementById('clear-all')?.addEventListener('click', () => {
       if (confirm('Bạn có chắc chắn muốn xóa tất cả giao dịch?')) {
@@ -745,6 +1049,7 @@ class ExpenseManager {
       overlay.classList.remove('hidden');
       overlay.classList.add('flex');
       catModal.classList.remove('hidden');
+      this.setCategoryType('Chi tiêu'); // Set default type
       this.renderCategoryManager();
     });
 
@@ -939,24 +1244,34 @@ class ExpenseManager {
       ]);
 
       // Map income data
-      const mappedIncomes: Transaction[] = incomeRes.data.map((item: any) => ({
-        id: item.incomeId?.toString() || Math.random().toString(),
-        description: item.moTa || 'Thu nhập',
-        amount: parseFloat(item.amount),
-        type: 'income' as const,
-        category: item.loai?.toString() || 'Khác', // loai is ID, convert to string
-        date: item.date || new Date().toISOString()
-      }));
+      const mappedIncomes: Transaction[] = incomeRes.data.map((item: any) => {
+        const categoryName = this.categories.find(c => c.id.toString() === item.loai?.toString())?.name || 'Khác';
+        return {
+          id: item.incomeId?.toString() || Math.random().toString(),
+          incomeId: item.incomeId,  // 🔑 Store primary key for delete operations
+          description: item.moTa || 'Thu nhập',
+          amount: parseFloat(item.amount),
+          type: 'income' as const,
+          category: categoryName,
+          categoryId: item.loai,
+          date: item.date || new Date().toISOString()
+        };
+      });
 
       // Map expense data
-      const mappedExpenses: Transaction[] = expenseRes.data.map((item: any) => ({
-        id: item.chiPhiId?.toString() || Math.random().toString(),
-        description: item.moTa || 'Chi tiêu',
-        amount: parseFloat(item.amount),
-        type: 'expense' as const,
-        category: item.loai?.toString() || 'Khác', // loai is ID, convert to string
-        date: item.date || new Date().toISOString()
-      }));
+      const mappedExpenses: Transaction[] = expenseRes.data.map((item: any) => {
+        const categoryName = this.categories.find(c => c.id.toString() === item.loai?.toString())?.name || 'Khác';
+        return {
+          id: item.chiPhiId?.toString() || Math.random().toString(),
+          chiPhiId: item.chiPhiId,  // 🔑 Store primary key for delete operations
+          description: item.moTa || 'Chi tiêu',
+          amount: parseFloat(item.amount),
+          type: 'expense' as const,
+          category: categoryName,
+          categoryId: item.loai,
+          date: item.date || new Date().toISOString()
+        };
+      });
 
       // Merge and sort by date (newest first)
       const allTransactions = [...mappedIncomes, ...mappedExpenses].sort((a, b) => 
@@ -985,7 +1300,13 @@ class ExpenseManager {
         // Keep default categories if migration is needed
         localStorage.removeItem('categories');
       } else {
-        this.categories = parsed;
+        this.categories = parsed.map((item: any, index: number) => ({
+          id: item.id ?? `cached-${index}`,
+          name: item.name,
+          icon: item.icon,
+          color: item.color,
+          type: item.type
+        }));
       }
     }
 
@@ -1003,7 +1324,7 @@ class ExpenseManager {
     localStorage.setItem('goals', JSON.stringify(this.goals));
   }
 
-  private addCategory() {
+  private async addCategory() {
     const input = document.getElementById('new-category-input') as HTMLInputElement;
     const iconInput = document.getElementById('new-category-icon') as HTMLSelectElement;
     const colorInput = document.getElementById('new-category-color') as HTMLInputElement;
@@ -1012,30 +1333,221 @@ class ExpenseManager {
     const icon = iconInput.value;
     const color = colorInput.value;
 
-    if (!name) return;
-    if (this.categories.some(c => c.name === name)) {
-      this.showToast('Danh mục đã tồn tại', 'error');
+    if (!name) {
+      this.showToast('Vui lòng nhập tên danh mục', 'error');
       return;
     }
 
-    this.categories.push({ name, icon, color });
-    this.saveData();
-    this.updateCategoryDropdowns();
-    this.renderCategoryManager();
-    input.value = '';
-    this.showToast('Đã thêm danh mục mới', 'success');
+    const duplicateExists = this.categories.some(c => c.name === name && this.isCategoryTypeMatch(c.type, this.currentCategoryType));
+    if (duplicateExists) {
+      this.showToast('Danh mục đã tồn tại trong phân loại này', 'error');
+      return;
+    }
+
+    // Gửi về backend
+    await this.saveCategory(name, icon, color);
   }
 
-  public deleteCategory(name: string) {
+  private isCategoryTypeMatch(categoryType: string, selectedType: 'Thu nhập' | 'Chi tiêu'): boolean {
+    const backendType = selectedType === 'Thu nhập' ? 'income' : 'expense';
+    return categoryType === selectedType || categoryType === backendType;
+  }
+
+  private getCategoryTypeLabel(categoryType: string): string {
+    if (categoryType === 'income' || categoryType === 'Thu nhập') return 'Thu nhập';
+    if (categoryType === 'expense' || categoryType === 'Chi tiêu') return 'Chi tiêu';
+    return categoryType;
+  }
+
+  private async saveCategory(name: string, icon: string, color: string) {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        this.showToast('Phiên đăng nhập hết hạn', 'error');
+        return;
+      }
+
+      // Map frontend type to backend type
+      const typeMap: Record<string, string> = {
+        'Thu nhập': 'income',
+        'Chi tiêu': 'expense'
+      };
+
+      const backendType = typeMap[this.currentCategoryType] || 'expense';
+
+      const response = await axios.post('http://127.0.0.1:8000/api/categories/', {
+        tenLoai: name,
+        icon: icon,
+        color: color,
+        type: backendType
+      }, {
+        headers: {
+          'Authorization': `Token ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.status === 201) {
+        this.showToast('Danh mục đã được tạo thành công!', 'success');
+        // Reload categories to reflect changes
+        await this.loadCategories();
+        // Reset form
+        const input = document.getElementById('new-category-input') as HTMLInputElement;
+        const iconInput = document.getElementById('new-category-icon') as HTMLSelectElement;
+        const colorInput = document.getElementById('new-category-color') as HTMLInputElement;
+        input.value = '';
+        iconInput.value = 'shopping-bag';
+        colorInput.value = '#f97316';
+      }
+    } catch (error: any) {
+      console.error('Lỗi khi lưu danh mục:', error);
+      const errorMsg = error.response?.data?.detail || error.message || 'Không thể tạo danh mục';
+      this.showToast(errorMsg, 'error');
+    }
+  }
+
+  private async loadCategories() {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) return;
+
+      const response = await axios.get('http://127.0.0.1:8000/api/categories/', {
+        headers: { 'Authorization': `Token ${token}` }
+      });
+
+      // Map từ backend data sang frontend format
+      this.categories = response.data.map((cat: any) => ({
+        id: cat.loaiId,
+        name: cat.tenLoai,
+        icon: cat.icon,
+        color: cat.color,
+        type: cat.type
+      }));
+
+      this.saveData(); // Lưu vào localStorage để đồng bộ
+      this.updateCategoryDropdowns();
+    } catch (error) {
+      console.error('Lỗi khi tải danh mục:', error);
+      // Fallback to localStorage if API fails
+    }
+  }
+
+  public setCategoryType(type: 'Thu nhập' | 'Chi tiêu') {
+    this.currentCategoryType = type;
+    
+    // Cập nhật UI nút bấm
+    const btnIncome = document.getElementById('btn-type-income');
+    const btnExpense = document.getElementById('btn-type-expense');
+
+    if (type === 'Thu nhập') {
+      btnIncome?.classList.replace('border-gray-100', 'border-green-500');
+      btnIncome?.classList.replace('text-gray-400', 'text-green-600');
+      btnIncome?.classList.add('bg-green-50');
+      
+      btnExpense?.classList.replace('border-orange-500', 'border-gray-100');
+      btnExpense?.classList.replace('text-orange-600', 'text-gray-400');
+      btnExpense?.classList.remove('bg-orange-50');
+    } else {
+      // Ngược lại cho Chi tiêu (giữ màu cam như thiết kế cũ của bạn)
+      btnExpense?.classList.replace('border-gray-100', 'border-orange-500');
+      btnExpense?.classList.replace('text-gray-400', 'text-orange-600');
+      btnExpense?.classList.add('bg-orange-50');
+      
+      btnIncome?.classList.replace('border-green-500', 'border-gray-100');
+      btnIncome?.classList.replace('text-green-600', 'text-gray-400');
+      btnIncome?.classList.remove('bg-green-50');
+    }
+  }
+
+  private setTransactionType(type: string) {
+    const expenseBtn = document.getElementById('type-expense-btn');
+    const incomeBtn = document.getElementById('type-income-btn');
+    const hiddenInput = document.getElementById('type') as HTMLInputElement;
+    
+    if (type === 'expense') {
+      expenseBtn?.classList.add('bg-white', 'dark:bg-slate-900', 'shadow-sm', 'text-rose-600');
+      expenseBtn?.classList.remove('text-slate-400');
+      incomeBtn?.classList.remove('bg-white', 'dark:bg-slate-900', 'shadow-sm', 'text-emerald-600');
+      incomeBtn?.classList.add('text-slate-400');
+      hiddenInput.value = 'expense';
+    } else {
+      incomeBtn?.classList.add('bg-white', 'dark:bg-slate-900', 'shadow-sm', 'text-emerald-600');
+      incomeBtn?.classList.remove('text-slate-400');
+      expenseBtn?.classList.remove('bg-white', 'dark:bg-slate-900', 'shadow-sm', 'text-rose-600');
+      expenseBtn?.classList.add('text-slate-400');
+      hiddenInput.value = 'income';
+    }
+    
+    // Update category dropdown based on type
+    this.updateCategoryDropdownForTransaction(type);
+  }
+
+  private renderCategoryDropdown(type: 'Thu nhập' | 'Chi tiêu') {
+    const catSelect = document.getElementById('transaction-category') as HTMLSelectElement;
+    if (!catSelect) return;
+
+    const filteredCategories = this.categories.filter(c => this.isCategoryTypeMatch(c.type, type));
+    if (filteredCategories.length === 0) {
+      catSelect.innerHTML = '<option value="">-- Vui lòng tạo danh mục trước --</option>';
+      catSelect.value = '';
+      return;
+    }
+
+    catSelect.innerHTML = filteredCategories.map(c => `
+      <option value="${c.id}">${c.name}</option>
+    `).join('');
+    catSelect.value = filteredCategories[0].id.toString();
+  }
+
+  private updateCategoryDropdownForTransaction(type: string) {
+    const transactionType = type === 'income' ? 'Thu nhập' : 'Chi tiêu';
+    this.renderCategoryDropdown(transactionType);
+  }
+
+  public async deleteCategory(id: number | string) {
+    const category = this.categories.find(c => c.id.toString() === id.toString());
+    if (!category) {
+      this.showToast('Danh mục không tồn tại', 'error');
+      return;
+    }
+
     if (this.categories.length <= 1) {
       this.showToast('Phải có ít nhất một danh mục', 'error');
       return;
     }
-    this.categories = this.categories.filter(c => c.name !== name);
-    delete this.categoryBudgets[name];
-    this.saveData();
-    this.updateCategoryDropdowns();
-    this.renderCategoryManager();
+
+    if (!confirm(`Bạn có chắc chắn muốn xóa danh mục "${category.name}"? Các giao dịch liên quan có thể bị ảnh hưởng.`)) {
+      return;
+    }
+
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      this.showToast('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 'error');
+      return;
+    }
+
+    try {
+      const url = `http://127.0.0.1:8000/api/categories/${category.id}/`;
+      const response = await axios.delete(url, {
+        headers: {
+          'Authorization': `Token ${token}`
+        }
+      });
+
+      if (response.status === 204) {
+        this.categories = this.categories.filter(c => c.id.toString() !== id.toString());
+        delete this.categoryBudgets[category.name];
+        this.saveData();
+        this.updateCategoryDropdowns();
+        this.renderCategoryManager();
+        await this.loadAndRender();
+        this.showToast('Đã xóa danh mục thành công!', 'success');
+      }
+    } catch (error: any) {
+      console.error('Lỗi khi xóa danh mục:', error);
+      const msg = error.response?.data?.error || error.response?.data?.detail || error.message || 'Không thể xóa danh mục này!';
+      this.showToast(msg, 'error');
+    }
   }
 
   public setCategoryBudget(name: string, amount: number) {
@@ -1047,14 +1559,17 @@ class ExpenseManager {
   }
 
   private updateCategoryDropdowns() {
-    const catSelect = document.getElementById('category') as HTMLSelectElement;
     const filterSelect = document.getElementById('filter-category') as HTMLSelectElement;
     const budgetSelect = document.getElementById('budget-category') as HTMLSelectElement;
 
     const options = this.categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
-    if (catSelect) catSelect.innerHTML = options;
     if (filterSelect) filterSelect.innerHTML = `<option value="all">Tất cả danh mục</option>` + options;
     if (budgetSelect) budgetSelect.innerHTML = options;
+    
+    // Update transaction category dropdown based on current type
+    const hiddenInput = document.getElementById('type') as HTMLInputElement;
+    const currentType = hiddenInput?.value || 'expense';
+    this.updateCategoryDropdownForTransaction(currentType);
   }
 
   private renderCategoryManager() {
@@ -1066,9 +1581,12 @@ class ExpenseManager {
             <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background-color: ${c.color}15; color: ${c.color}">
               <i data-lucide="${c.icon}" class="w-5 h-5"></i>
             </div>
-            <span class="text-sm font-bold text-slate-700 dark:text-slate-200">${c.name}</span>
+            <div class="flex flex-col">
+              <span class="text-sm font-bold text-slate-700 dark:text-slate-200">${c.name}</span>
+              <span class="text-xs text-slate-500 dark:text-slate-400">${this.getCategoryTypeLabel(c.type)}</span>
+            </div>
           </div>
-          <button onclick="window.expenseManager.deleteCategory('${c.name}')" class="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 p-2 rounded-xl transition-colors">
+          <button onclick="window.expenseManager.deleteCategory('${c.id}')" class="text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 p-2 rounded-xl transition-colors">
             <i data-lucide="trash-2" class="w-4 h-4"></i>
           </button>
         </div>
@@ -1121,14 +1639,17 @@ class ExpenseManager {
     const descInput = document.getElementById('desc') as HTMLInputElement;
     const amountInput = document.getElementById('amount') as HTMLInputElement;
     const typeInput = document.getElementById('type') as HTMLInputElement;
-    const categorySelect = document.getElementById('category') as HTMLSelectElement;
+    const categorySelect = document.getElementById('transaction-category') as HTMLSelectElement;
 
     const desc = descInput.value;
     const amount = this.parseFormattedNumber(amountInput.value);
     const type = typeInput.value as 'income' | 'expense';
-    const category = categorySelect.value;
+    const categoryId = categorySelect.value;
+    const selectedCategoryId = parseInt(categoryId, 10);
+    const categoryObj = this.categories.find(c => c.id.toString() === categoryId.toString());
+    const categoryName = categoryObj?.name || 'Khác';
 
-    if (!desc || isNaN(amount) || amount <= 0) {
+    if (!desc || isNaN(amount) || amount <= 0 || !categoryId || isNaN(selectedCategoryId)) {
       this.showToast('Vui lòng điền đầy đủ thông tin giao dịch', 'error');
       return;
     }
@@ -1138,7 +1659,8 @@ class ExpenseManager {
       description: desc,
       amount,
       type,
-      category,
+      category: categoryName,
+      categoryId: selectedCategoryId,
       date: new Date().toISOString()
     };
 
@@ -1161,7 +1683,7 @@ class ExpenseManager {
       const response = await axios.post(endpoint, {
         amount: amount,
         description: desc,
-        category: category,
+        loai: selectedCategoryId,
         date: new Date().toISOString().split('T')[0] // Ngày hôm nay (YYYY-MM-DD)
       }, {
         headers: {
@@ -1201,6 +1723,72 @@ class ExpenseManager {
     }
   }
 
+  private async deleteTransaction(id: any, type: 'income' | 'expense') {
+    // 🔍 DEBUG 1: Kiểm tra ID có bị undefined không
+    console.log('🔍 [DEBUG 1] ID nhận được:', id, '| Type:', type);
+    
+    if (!id || id === 'undefined' || id === undefined) {
+      console.error('❌ [ERROR] ID không hợp lệ! ID:', id);
+      this.showToast('❌ Lỗi: Không tìm thấy ID giao dịch!', 'error');
+      return;
+    }
+
+    // 1. Xác nhận nghiệp vụ
+    const confirmMsg = type === 'income' 
+        ? "Xóa khoản thu này sẽ trừ vào số dư của bạn. Tiếp tục?" 
+        : "Xóa khoản chi này sẽ hoàn lại tiền vào số dư. Tiếp tục?";
+    
+    if (!confirm(confirmMsg)) return;
+
+    // 2. Cấu hình API
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      console.error('❌ [ERROR] Token không tồn tại');
+      this.showToast('❌ Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại!', 'error');
+      return;
+    }
+
+    const endpoint = type === 'income' ? 'incomes' : 'expenses';
+    const url = `http://127.0.0.1:8000/api/${endpoint}/${id}/`; // 🔍 DEBUG: URL với trailing slash
+
+    try {
+      // 🔍 DEBUG 2: Log URL và token trước khi gửi
+      console.log('🚀 [DEBUG 2] Gửi DELETE request tới:', url);
+      console.log('🔐 Token (first 20 chars):', token.substring(0, 20) + '...');
+      
+      // 3. Gửi lệnh DELETE thực thụ xuống Database
+      const response = await axios.delete(url, {
+        headers: {
+          'Authorization': `Token ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      // 🔍 DEBUG 3: Log phản hồi từ server
+      console.log('✅ [DEBUG 3] Phản hồi từ Server - Status:', response.status);
+      
+      if (response.status === 204) {
+        console.log(`✅ Đã xóa vĩnh viễn ${type} ID: ${id}`);
+        this.showToast(`✅ Xóa ${type === 'income' ? 'khoản thu' : 'khoản chi'} thành công!`, 'success');
+        
+        // 4. QUAN TRỌNG: Gọi lại hàm fetch dữ liệu để tính lại Số dư và vẽ lại UI
+        console.log('🔄 [DEBUG 4] Đang tải lại dữ liệu từ API...');
+        await this.loadAndRender();
+        console.log('✅ [DEBUG 4] Tải lại UI hoàn tất');
+      }
+    } catch (error: any) {
+      // 🔍 DEBUG 5: Log chi tiết lỗi
+      console.error('❌ [ERROR] Chi tiết lỗi DELETE:');
+      console.error('  - Status code:', error.response?.status);
+      console.error('  - Response data:', error.response?.data);
+      console.error('  - Error message:', error.message);
+      console.error('  - Full error:', error);
+      
+      const errorMsg = error.response?.data?.detail || error.response?.data?.error || error.message || 'Không thể xóa giao dịch';
+      this.showToast(`❌ ${errorMsg}`, 'error');
+    }
+  }
+
   private checkBudgetAlert() {
     const totalExpense = this.transactions
       .filter(t => t.type === 'expense' && new Date(t.date).getMonth() === new Date().getMonth())
@@ -1226,22 +1814,6 @@ class ExpenseManager {
       this.showToast(`Cảnh báo: Bạn đã vượt ngân sách cho danh mục "${category}"!`, 'error');
     } else if (totalExpense > budget * 0.8) {
       this.showToast(`Lưu ý: Bạn đã tiêu hơn 80% ngân sách cho "${category}".`, 'warning');
-    }
-  }
-
-  public deleteTransaction(id: string) {
-    const el = document.querySelector(`[data-id="${id}"]`);
-    if (el) {
-      el.classList.add('opacity-0', '-translate-x-8');
-      setTimeout(() => {
-        this.transactions = this.transactions.filter(t => t.id !== id);
-        this.saveData();
-        this.render();
-      }, 300);
-    } else {
-      this.transactions = this.transactions.filter(t => t.id !== id);
-      this.saveData();
-      this.render();
     }
   }
 
@@ -1710,8 +2282,14 @@ class ExpenseManager {
 
     this.listEl.innerHTML = paginated.map((t, index) => {
       const categoryObj = this.categories.find(c => c.name === t.category) || { icon: 'tag', color: '#64748b' };
+      // 🔑 Lấy đúng ID khóa chính (incomeId hoặc chiPhiId)
+      const primaryId = t.type === 'income' ? t.incomeId : t.chiPhiId;
+      const displayId = primaryId || t.id; // Backup to t.id if primary key not found
+      
+      console.log(`🔍 [RENDER] Transaction - Type: ${t.type}, Primary ID: ${primaryId}, Display ID: ${displayId}`);
+      
       return `
-      <div data-id="${t.id}" class="p-6 flex items-center justify-between hover:bg-orange-50/30 dark:hover:bg-slate-800 transition-all group animate-in slide-in-from-bottom-4 fade-in duration-500" style="animation-delay: ${index * 30}ms">
+      <div data-id="${displayId}" class="p-6 flex items-center justify-between hover:bg-orange-50/30 dark:hover:bg-slate-800 transition-all group animate-in slide-in-from-bottom-4 fade-in duration-500" style="animation-delay: ${index * 30}ms">
         <div class="flex items-center gap-5">
           <div class="w-12 h-12 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110" style="background-color: ${categoryObj.color}15; color: ${categoryObj.color}">
             <i data-lucide="${categoryObj.icon}" class="w-6 h-6"></i>
@@ -1728,7 +2306,7 @@ class ExpenseManager {
           <p class="font-black text-lg balance-value ${t.type === 'income' ? 'text-green-600' : 'text-rose-600'}">
             ${t.type === 'income' ? '+' : '-'}${this.formatCurrency(t.amount)}
           </p>
-          <button onclick="window.expenseManager.deleteTransaction('${t.id}')" class="p-2.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all rounded-xl opacity-0 group-hover:opacity-100">
+          <button onclick="window.expenseManager.deleteTransaction('${displayId}', '${t.type}')" class="p-2.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all rounded-xl opacity-0 group-hover:opacity-100" title="Xóa giao dịch này">
             <i data-lucide="trash-2" class="w-4 h-4"></i>
           </button>
         </div>
@@ -1804,30 +2382,38 @@ class ExpenseManager {
       .append('g')
       .attr('class', 'arc');
 
-    arcs.append('path')
+    const paths = arcs.append('path') as d3.Selection<SVGPathElement, d3.PieArcDatum<{ name: string; value: number; }>, SVGGElement, unknown>;
+    
+    paths
       .attr('fill', d => color(d.data.name))
-      .attr('d', arc)
+      .attr('d', d => arc(d) as string)
       .style('opacity', 0.8)
       .attr('class', 'cursor-pointer transition-all duration-500')
-      .on('mouseover', function(event, d) {
+      .on('mouseover', function(event, d: d3.PieArcDatum<{ name: string; value: number; }>) {
         d3.select(this)
           .transition()
           .duration(500)
-          .attr('d', arcHover)
+          .attrTween('d', () => {
+            const i = d3.interpolate({ startAngle: d.startAngle, endAngle: d.startAngle }, d);
+            return (t) => arcHover(i(t) as any)!;
+          })
           .style('opacity', 1)
           .attr('filter', 'drop-shadow(0 0 8px rgba(249, 115, 22, 0.4))');
       })
-      .on('mouseout', function(event, d) {
+      .on('mouseout', function(event, d: d3.PieArcDatum<{ name: string; value: number; }>) {
         d3.select(this)
           .transition()
           .duration(500)
-          .attr('d', arc)
+          .attrTween('d', () => {
+            const i = d3.interpolate(d, { startAngle: d.endAngle, endAngle: d.endAngle });
+            return (t) => arc(i(t) as any)!;
+          })
           .style('opacity', 0.8)
           .attr('filter', 'none');
       })
       .transition()
       .duration(1000)
-      .attrTween('d', function(d) {
+      .attrTween('d', function(this: SVGPathElement, d: d3.PieArcDatum<{ name: string; value: number; }>) {
         const i = d3.interpolate({ startAngle: 0, endAngle: 0 }, d);
         return function(t) { return arc(i(t))!; };
       });
