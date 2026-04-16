@@ -3,6 +3,8 @@ import { createIcons, icons } from 'lucide';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import axios from 'axios';
 import './index.css';
+import './ai/ai_chat.css';
+import './ai/ai_chat.js';
 import { GoogleGenAI } from '@google/genai';
 import { handleRegister } from './auth/register';
 import { handleLogin, handleForgotPassword, handleResetPasswordClick } from './auth/login';
