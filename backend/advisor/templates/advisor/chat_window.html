@@ -1,0 +1,29 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Advisor Chat</title>
+  <link rel="stylesheet" href="{% static 'advisor/chat.css' %}">
+</head>
+<body>
+  <div id="advisor-chat-widget" class="advisor-chat-widget">
+    <button id="advisor-chat-toggle" class="advisor-chat-toggle" aria-label="Open Advisor chat">
+      <span>💬</span>
+    </button>
+    <div id="advisor-chat-window" class="advisor-chat-window hidden" role="dialog" aria-label="Financial Advisor Chat">
+      <div class="advisor-chat-header">
+        <span>Advisor Thu Chi</span>
+        <button id="advisor-chat-close" class="advisor-chat-close" aria-label="Close">✕</button>
+      </div>
+      <div id="advisor-chat-messages" class="advisor-chat-messages"></div>
+      <div id="advisor-chat-controls" class="advisor-chat-controls">
+        <input id="advisor-chat-input" type="text" placeholder="Hỏi AI về chi tiêu của bạn..." autocomplete="off" />
+        <button id="advisor-chat-send" class="advisor-chat-send">Gửi</button>
+      </div>
+    </div>
+  </div>
+  <script src="{% static 'advisor/advisor_chat.js' %}" defer></script>
+</body>
+</html>

@@ -8,8 +8,11 @@ import environ
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 env = environ.Env()
-# Đọc file .env.local
-environ.Env.read_env(os.path.join(BASE_DIR, '.env.local'))
+# Đọc file .env.local; nếu không tồn tại thì dùng .env
+env_file = os.path.join(BASE_DIR, '.env.local')
+if not os.path.exists(env_file):
+    env_file = os.path.join(BASE_DIR, '.env')
+environ.Env.read_env(env_file)
 
 # Cấu hình Email SMTP (Dùng chung cho cả Dev và Prod để test thật)
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -31,6 +34,8 @@ print("DEFAULT_FROM_EMAIL =", DEFAULT_FROM_EMAIL)
 # 2. Bảo mật & Chế độ Debug
 SECRET_KEY = 'django-insecure-dev-key'
 DEBUG = True  # Enable debug again
+GEMINI_API_KEY = env('GEMINI_API_KEY', default='')
+GEMINI_MODEL = env('GEMINI_MODEL', default='gemini-1.5-flash')
 ALLOWED_HOSTS = ['*']
 
 # 3. Định nghĩa các App
@@ -45,6 +50,7 @@ INSTALLED_APPS = [
     # App của bạn
     'expenses',
     'ai',
+    'advisor',
     
     # Thêm DRF để làm API 
     'rest_framework',
