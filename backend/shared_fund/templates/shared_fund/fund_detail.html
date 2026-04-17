@@ -1,0 +1,126 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chi tiết quỹ</title>
+  <link rel="stylesheet" href="{% static 'shared_fund/css/style.css' %}">
+</head>
+<body data-fund-id="{{ fund_id }}">
+  <div class="shared-fund-page">
+    <nav class="shared-fund-nav">
+      <a href="/">Trang chủ</a>
+      <a href="/shared-fund/">Dashboard Quỹ Chung</a>
+    </nav>
+    <header class="shared-fund-header">
+      <p id="fund-description">Thông tin quỹ đang tải...</p>
+    </header>
+
+    <section class="shared-fund-panel grid-2">
+      <div class="card">
+        <h2>Thông tin chung</h2>
+        <div class="detail-row"><strong>Chủ quỹ:</strong> <span id="fund-owner"></span></div>
+        <div class="detail-row"><strong>Số thành viên:</strong> <span id="fund-members-count"></span></div>
+        <div class="detail-row"><strong>Cập nhật:</strong> <span id="fund-updated"></span></div>
+      </div>
+      <div class="card">
+        <h2>Hành động</h2>
+        <button id="open-expense-modal">Thêm chi tiêu</button>
+        <button id="open-settlement-modal">Thanh toán</button>
+        <button id="open-invite-modal">Mời thành viên</button>
+      </div>
+    </section>
+
+    <section class="shared-fund-panel">
+      <div class="card">
+        <h2>Thành viên</h2>
+        <ul id="fund-members" class="member-list"></ul>
+      </div>
+    </section>
+
+    <section class="shared-fund-panel grid-2">
+      <div class="card">
+        <h2>Công nợ</h2>
+        <div id="balances-list" class="balance-list"></div>
+      </div>
+      <div class="card">
+        <h2>Danh sách chi tiêu</h2>
+        <div id="expenses-list" class="transaction-list"></div>
+      </div>
+    </section>
+
+    <section class="shared-fund-panel">
+      <div class="card">
+        <h2>Thanh toán</h2>
+        <div id="settlements-list" class="transaction-list"></div>
+      </div>
+    </section>
+
+    <div id="notification" class="notification hidden"></div>
+  </div>
+
+  <div class="modal hidden" id="expense-modal">
+    <div class="modal-content">
+      <h3>Thêm chi tiêu</h3>
+      <form id="expense-form">
+        <label for="expense-amount">Số tiền</label>
+        <input id="expense-amount" type="number" step="0.01" min="0" required>
+        <label for="expense-description">Mô tả</label>
+        <input id="expense-description" type="text" placeholder="Mô tả chi tiêu">
+        <label for="expense-date">Ngày</label>
+        <input id="expense-date" type="date" required>
+        <label for="expense-members">Thành viên chia</label>
+        <select id="expense-members" multiple size="4"></select>
+        <div class="modal-actions">
+          <button type="submit">Lưu chi tiêu</button>
+          <button type="button" class="secondary" data-close="expense-modal">Đóng</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="settlement-modal">
+    <div class="modal-content">
+      <h3>Thanh toán</h3>
+      <form id="settlement-form">
+        <label for="settlement-to">Thanh toán cho</label>
+        <select id="settlement-to" required></select>
+        <label for="settlement-amount">Số tiền</label>
+        <input id="settlement-amount" type="number" step="0.01" min="0" required>
+        <div class="modal-actions">
+          <button type="submit">Ghi nhận</button>
+          <button type="button" class="secondary" data-close="settlement-modal">Đóng</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="invite-modal">
+    <div class="modal-content">
+      <h3>Mời thành viên</h3>
+      <form id="invite-form">
+        <label for="invite-user-id">User ID</label>
+        <input id="invite-user-id" type="number" min="1" required>
+        <label for="invite-role">Vai trò</label>
+        <select id="invite-role">
+          <option value="member">Member</option>
+          <option value="owner">Owner</option>
+        </select>
+        <div class="modal-actions">
+          <button type="submit">Mời</button>
+          <button type="button" class="secondary" data-close="invite-modal">Đóng</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    window.sharedFundConfig = {
+      fundId: {{ fund_id|default:'0' }},
+      baseApi: '/api/shared-fund/',
+    };
+  </script>
+  <script src="{% static 'shared_fund/js/fund.js' %}" defer></script>
+</body>
+</html>

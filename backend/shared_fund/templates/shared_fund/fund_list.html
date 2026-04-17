@@ -1,0 +1,46 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quỹ chung</title>
+  <link rel="stylesheet" href="{% static 'shared_fund/css/style.css' %}">
+</head>
+<body>
+  <div class="shared-fund-page">
+    <nav class="shared-fund-nav">
+      <a href="/">Trang chủ</a>
+      <a href="/shared-fund/">Dashboard Quỹ Chung</a>
+    </nav>
+    <header class="shared-fund-header">
+      <h1>Quỹ Chung</h1>
+      <p>Quản lý danh sách quỹ, chi tiêu nhóm và công nợ.</p>
+    </header>
+
+    <section class="shared-fund-panel">
+      <div class="card">
+        <h2>Tạo quỹ mới</h2>
+        <form id="create-fund-form">
+          <label for="fund-name">Tên quỹ</label>
+          <input id="fund-name" type="text" placeholder="Nhập tên quỹ" required>
+          <label for="fund-description">Mô tả</label>
+          <textarea id="fund-description" placeholder="Mô tả ngắn" rows="3"></textarea>
+          <button type="submit">Tạo quỹ</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="shared-fund-panel">
+      <div class="card">
+        <h2>Danh sách quỹ</h2>
+        <div id="fund-list" class="fund-list"></div>
+      </div>
+    </section>
+
+    <div id="notification" class="notification hidden"></div>
+  </div>
+
+  <script src="{% static 'shared_fund/js/fund.js' %}" defer></script>
+</body>
+</html>

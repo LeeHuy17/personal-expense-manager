@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'expenses',
     'ai',
     'advisor',
+    'shared_fund',
     
     # Thêm DRF để làm API 
     'rest_framework',
