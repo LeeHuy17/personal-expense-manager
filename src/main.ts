@@ -11,6 +11,516 @@ import { handleLogin, handleForgotPassword, handleResetPasswordClick } from './a
 import { initResetPasswordPage, setupResetPasswordListeners } from './auth/reset-password';
 import { showForgotTab, showLoginTab, showResetTab } from './auth/ui-logic';
 
+const backendOrigin = (import.meta.env.VITE_BACKEND_URL as string) || (import.meta.env.VITE_API_BASE as string) || 'http://127.0.0.1:8000';
+const sharedFundApiBase = `${backendOrigin.replace(/\/$/, '')}/api/shared-fund/`;
+
+function updateSharedFundLinks() {
+    const links = document.querySelectorAll<HTMLAnchorElement>('a[data-shared-fund-link]');
+    links.forEach((link) => {
+        link.href = `${backendOrigin.replace(/\/$/, '')}/shared-fund/`;
+    });
+}
+
+function getSharedFundHeaders(isJson = true) {
+  const token = localStorage.getItem('accessToken') || '';
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+  };
+  if (isJson) headers['Content-Type'] = 'application/json';
+  if (token) {
+    headers['Authorization'] = token.startsWith('Token ') || token.startsWith('Bearer ') ? token : `Token ${token}`;
+  }
+  return headers;
+}
+
+function showSharedFundNotice(message: string, type: 'success' | 'error' | 'info' = 'success') {
+  const notice = document.getElementById('shared-fund-notice');
+  if (!notice) return;
+  notice.textContent = message;
+  notice.className = `mt-6 rounded-3xl p-4 text-sm ${type === 'success' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-200' : type === 'error' ? 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-200' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'}`;
+  notice.classList.remove('hidden');
+  window.setTimeout(() => notice.classList.add('hidden'), 4500);
+}
+
+let currentSharedFundId: number | null = null;
+let currentSharedFundMembers: any[] = [];
+
+function roundToTwo(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function scrollToSharedFundSection() {
+  const section = document.getElementById('shared-fund-section');
+  section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function fetchSharedFundData(path: string, options: RequestInit = {}) {
+  const request = await fetch(`${sharedFundApiBase}${path}`, {
+    credentials: 'include',
+    headers: getSharedFundHeaders(Boolean(options.body === undefined ? true : options.body)),
+    ...options,
+  });
+
+  const contentType = request.headers.get('content-type') || '';
+  const payload = contentType.includes('application/json') ? await request.json() : await request.text();
+
+  if (!request.ok) {
+    const message = payload?.detail || payload?.message || request.statusText || 'Lỗi khi kết nối quỹ chung.';
+    throw new Error(message);
+  }
+  return payload;
+}
+
+function renderSharedFundSummary(funds: any[]) {
+  const countEl = document.getElementById('shared-fund-count');
+  const membersEl = document.getElementById('shared-fund-members');
+  const totalEl = document.getElementById('shared-fund-total');
+  if (countEl) countEl.textContent = `${funds.length}`;
+  if (membersEl) {
+    const memberCount = funds.reduce((total, fund) => total + (fund.member_count || 0), 0);
+    membersEl.textContent = `${memberCount}`;
+  }
+  if (totalEl) totalEl.textContent = `${funds.length > 0 ? 'Hoạt động' : 'Chưa có'}`;
+}
+
+function renderSharedFundList(funds: any[]) {
+  const list = document.getElementById('shared-fund-list');
+  if (!list) return;
+  if (!funds || funds.length === 0) {
+    list.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">Chưa có quỹ chung nào. Tạo quỹ mới để bắt đầu.</p>';
+    renderSharedFundSummary([]);
+    return;
+  }
+
+  list.innerHTML = funds.map((fund) => `
+    <div class="rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-4 shadow-sm">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h5 class="text-base font-bold text-slate-900 dark:text-white">${fund.name}</h5>
+          <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">${fund.description || 'Chưa có mô tả'}</p>
+        </div>
+        <span class="text-xs uppercase tracking-[0.2em] font-bold text-slate-400">${fund.member_count || 0} thành viên</span>
+      </div>
+      <div class="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-500 dark:text-slate-400">
+        <div>
+          <p class="font-semibold text-slate-900 dark:text-white">${fund.owner}</p>
+          <p>Chủ quỹ</p>
+        </div>
+        <div>
+          <p class="font-semibold text-slate-900 dark:text-white">${new Date(fund.updated_at).toLocaleDateString('vi-VN')}</p>
+          <p>Cập nhật</p>
+        </div>
+      </div>
+    </div>
+  `).join('');
+  renderSharedFundSummary(funds);
+}
+
+async function loadSharedFunds(): Promise<any[]> {
+  const list = document.getElementById('shared-fund-list');
+  if (list) {
+    list.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">Đang tải danh sách quỹ...</p>';
+  }
+
+  try {
+    const funds = await fetchSharedFundData('funds/', { method: 'GET' });
+    renderSharedFundList(funds);
+    setSharedFundSelectOptions(funds);
+    return funds;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Lỗi không xác định';
+    if (list) {
+      list.innerHTML = `<p class="text-sm text-rose-600 dark:text-rose-300">${message}</p>`;
+    }
+    showSharedFundNotice(message, 'error');
+    return [];
+  }
+}
+
+function setSharedFundSelectOptions(funds: any[]) {
+  const select = document.getElementById('shared-fund-select') as HTMLSelectElement | null;
+  if (!select) return;
+  select.innerHTML = '<option value="">-- Chọn quỹ --</option>' + funds.map(fund => `
+      <option value="${fund.id}">${fund.name}</option>
+    `).join('');
+}
+
+function renderSelectedFundSummary(fund: any) {
+  const nameEl = document.getElementById('selected-fund-name');
+  const ownerEl = document.getElementById('selected-fund-owner');
+  const membersEl = document.getElementById('selected-fund-members');
+  const updatedEl = document.getElementById('selected-fund-updated');
+  const expenseCountEl = document.getElementById('selected-fund-expense-count');
+  const balanceSummaryEl = document.getElementById('selected-fund-balance-summary');
+
+  if (nameEl) nameEl.textContent = fund.name || 'Chưa chọn';
+  if (ownerEl) ownerEl.textContent = fund.owner || '-';
+  if (membersEl) membersEl.textContent = `${fund.member_count || 0}`;
+  if (updatedEl) updatedEl.textContent = fund.updated_at ? new Date(fund.updated_at).toLocaleDateString('vi-VN') : '-';
+  if (expenseCountEl) expenseCountEl.textContent = `${fund.expense_count || 0}`;
+  if (balanceSummaryEl) balanceSummaryEl.textContent = fund.balance_summary || '0đ';
+}
+
+function setSharedFundMemberSelectors(members: any[]) {
+  currentSharedFundMembers = members;
+  const expenseSelect = document.getElementById('shared-fund-expense-members') as HTMLSelectElement | null;
+  const settlementSelect = document.getElementById('shared-fund-settlement-to') as HTMLSelectElement | null;
+
+  const options = members.map(member => `
+    <option value="${member.user_id}">${member.user} (${member.role})</option>
+  `).join('');
+
+  if (expenseSelect) {
+    expenseSelect.innerHTML = options;
+    renderExpenseSplitDetails();
+  }
+  if (settlementSelect) settlementSelect.innerHTML = options;
+}
+
+function renderExpenseSplitDetails() {
+  const splitTypeSelect = document.getElementById('shared-fund-expense-split-type') as HTMLSelectElement | null;
+  const membersSelect = document.getElementById('shared-fund-expense-members') as HTMLSelectElement | null;
+  const splitDetails = document.getElementById('shared-fund-split-details');
+  if (!splitTypeSelect || !membersSelect || !splitDetails) return;
+
+  const splitType = splitTypeSelect.value;
+  const selectedMembers = Array.from(membersSelect.selectedOptions).map(option => ({
+    user_id: Number(option.value),
+    label: option.text,
+  }));
+
+  if (splitType === 'equal') {
+    splitDetails.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">Hệ thống sẽ tự động chia đều chi phí cho các thành viên đã chọn.</p>';
+    return;
+  }
+
+  if (!selectedMembers.length) {
+    splitDetails.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">Chọn thành viên để nhập chi tiết chia.</p>';
+    return;
+  }
+
+  const label = splitType === 'percentage' ? 'Phần trăm (%)' : 'Số tiền (đ)';
+  const placeholder = splitType === 'percentage' ? '0.0' : '0';
+
+  splitDetails.innerHTML = `
+    <p class="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
+      ${splitType === 'percentage' ? 'Nhập tỷ lệ phần trăm cho mỗi thành viên:' : 'Nhập số tiền chia cho mỗi thành viên:'}
+    </p>
+    <div class="space-y-3">
+      ${selectedMembers.map(member => `
+        <div class="grid grid-cols-[1fr_120px] gap-3 items-center">
+          <div class="text-sm text-slate-900 dark:text-slate-100">${member.label}</div>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            data-split-user-id="${member.user_id}"
+            placeholder="${placeholder}"
+            class="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 py-2"
+          />
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderSharedFundExpenses(expenses: any[]) {
+  const container = document.getElementById('shared-fund-expenses-list');
+  if (!container) return;
+  if (!expenses.length) {
+    container.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">Chưa có chi tiêu nào.</p>';
+    return;
+  }
+  container.innerHTML = expenses.map(expense => `
+      <div class="rounded-3xl bg-slate-100 dark:bg-slate-950 p-4 border border-slate-200 dark:border-slate-800">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <p class="font-semibold text-slate-900 dark:text-white">${expense.description || 'Chi tiêu nhóm'}</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${new Date(expense.date).toLocaleDateString('vi-VN')} • ${expense.created_by || 'Người dùng'}</p>
+          </div>
+          <p class="font-bold text-slate-900 dark:text-white">${Number(expense.amount).toLocaleString('vi-VN')}đ</p>
+        </div>
+      </div>
+    `).join('');
+}
+
+function renderSharedFundSettlements(settlements: any[]) {
+  const container = document.getElementById('shared-fund-settlements-list');
+  if (!container) return;
+  if (!settlements.length) {
+    container.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">Chưa có thanh toán nào.</p>';
+    return;
+  }
+  container.innerHTML = settlements.map(item => `
+      <div class="rounded-3xl bg-slate-100 dark:bg-slate-950 p-4 border border-slate-200 dark:border-slate-800">
+        <p class="font-semibold text-slate-900 dark:text-white">${item.from_user || 'Bạn'} → ${item.to_user || 'Thành viên'}</p>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${new Date(item.created_at).toLocaleDateString('vi-VN')}</p>
+        <p class="mt-2 font-bold text-slate-900 dark:text-white">${Number(item.amount).toLocaleString('vi-VN')}đ</p>
+      </div>
+    `).join('');
+}
+
+function renderSharedFundBalances(balances: any[]) {
+  const container = document.getElementById('shared-fund-balances-list');
+  if (!container) return;
+  if (!balances.length) {
+    container.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">Chưa có dữ liệu công nợ.</p>';
+    return;
+  }
+  container.innerHTML = balances.map(item => `
+      <div class="rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-4 flex items-center justify-between gap-4">
+        <p class="font-semibold text-slate-900 dark:text-white">${item.username}</p>
+        <p class="font-bold ${item.balance < 0 ? 'text-rose-600' : 'text-emerald-600'}">${Number(item.balance).toLocaleString('vi-VN')}đ</p>
+      </div>
+    `).join('');
+}
+
+async function loadSelectedFundDetails(fundId: number) {
+  if (!fundId) return;
+  currentSharedFundId = fundId;
+  try {
+    const fund = await fetchSharedFundData(`funds/${fundId}/`, { method: 'GET' });
+    renderSelectedFundSummary({
+      ...fund,
+      expense_count: 0,
+      balance_summary: 'Đang tải...',
+    });
+    setSharedFundMemberSelectors(fund.members || []);
+    const [expenses, settlements, balances] = await Promise.all([
+      fetchSharedFundData(`expenses/?fund=${fundId}`, { method: 'GET' }).catch(() => []),
+      fetchSharedFundData(`settlements/?fund=${fundId}`, { method: 'GET' }).catch(() => []),
+      fetchSharedFundData(`funds/${fundId}/balances/`, { method: 'GET' }).catch(() => []),
+    ]);
+
+    renderSharedFundExpenses(expenses);
+    renderSharedFundSettlements(settlements);
+    renderSharedFundBalances(balances);
+    renderSelectedFundSummary({
+      ...fund,
+      expense_count: Array.isArray(expenses) ? expenses.length : 0,
+      balance_summary: balances.reduce((sum: number, item: any) => sum + Number(item.balance || 0), 0).toLocaleString('vi-VN') + 'đ',
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Không thể tải chi tiết quỹ.';
+    showSharedFundNotice(message, 'error');
+  }
+}
+
+async function submitSharedFundExpense(event: SubmitEvent) {
+  event.preventDefault();
+  if (!currentSharedFundId) {
+    showSharedFundNotice('Vui lòng chọn quỹ trước khi thêm chi tiêu.', 'error');
+    return;
+  }
+  const descInput = document.getElementById('shared-fund-expense-desc') as HTMLInputElement | null;
+  const amountInput = document.getElementById('shared-fund-expense-amount') as HTMLInputElement | null;
+  const dateInput = document.getElementById('shared-fund-expense-date') as HTMLInputElement | null;
+  const membersSelect = document.getElementById('shared-fund-expense-members') as HTMLSelectElement | null;
+  if (!descInput || !amountInput || !dateInput || !membersSelect) return;
+
+  const amount = Number(amountInput.value);
+  const description = descInput.value.trim();
+  const date = dateInput.value;
+  const splitTypeSelect = document.getElementById('shared-fund-expense-split-type') as HTMLSelectElement | null;
+  const splitType = splitTypeSelect?.value || 'equal';
+  const selected = Array.from(membersSelect.selectedOptions).map(option => Number(option.value));
+
+  if (!amount || amount <= 0) {
+    showSharedFundNotice('Số tiền phải lớn hơn 0.', 'error');
+    return;
+  }
+  if (!selected.length) {
+    showSharedFundNotice('Vui lòng chọn ít nhất một thành viên.', 'error');
+    return;
+  }
+
+  let splits: any[] = [];
+  if (splitType === 'equal') {
+    const roundedShare = Math.floor((amount / selected.length) * 100) / 100;
+    splits = selected.map((userId, index) => {
+      const remainder = index === selected.length - 1 ? roundToTwo(amount - roundedShare * (selected.length - 1)) : roundedShare;
+      return { user: userId, amount_owed: remainder };
+    });
+  } else {
+    const splitInputs = Array.from(document.querySelectorAll<HTMLInputElement>('#shared-fund-split-details input[data-split-user-id]'));
+    if (!splitInputs.length) {
+      showSharedFundNotice('Vui lòng nhập chi tiết chia cho từng thành viên.', 'error');
+      return;
+    }
+    splits = splitInputs.map(input => {
+      const userId = Number(input.dataset.splitUserId);
+      const value = Number(input.value);
+      if (!userId || value <= 0) {
+        throw new Error('Mỗi thành viên phải có giá trị chia hợp lệ.');
+      }
+      return splitType === 'percentage'
+        ? { user: userId, percentage: roundToTwo(value) }
+        : { user: userId, amount_owed: roundToTwo(value) };
+    });
+  }
+
+  const payload = {
+    fund: currentSharedFundId,
+    amount,
+    description,
+    date,
+    split_type: splitType,
+    splits,
+  };
+
+  console.log('Expense payload:', payload);
+
+  try {
+    await fetchSharedFundData('expenses/', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    showSharedFundNotice('Chi tiêu đã được ghi nhận.', 'success');
+    descInput.value = '';
+    amountInput.value = '';
+    dateInput.value = '';
+    membersSelect.selectedIndex = -1;
+    await loadSelectedFundDetails(currentSharedFundId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Lỗi ghi chi tiêu.';
+    showSharedFundNotice(message, 'error');
+  }
+}
+
+async function submitSharedFundSettlement(event: SubmitEvent) {
+  event.preventDefault();
+  if (!currentSharedFundId) {
+    showSharedFundNotice('Vui lòng chọn quỹ trước khi thanh toán.', 'error');
+    return;
+  }
+  const toSelect = document.getElementById('shared-fund-settlement-to') as HTMLSelectElement | null;
+  const amountInput = document.getElementById('shared-fund-settlement-amount') as HTMLInputElement | null;
+  if (!toSelect || !amountInput) return;
+
+  const toUser = Number(toSelect.value);
+  const amount = Number(amountInput.value);
+  if (!toUser) {
+    showSharedFundNotice('Vui lòng chọn người nhận thanh toán.', 'error');
+    return;
+  }
+  if (!amount || amount <= 0) {
+    showSharedFundNotice('Số tiền phải lớn hơn 0.', 'error');
+    return;
+  }
+
+  try {
+    await fetchSharedFundData('settlements/', {
+      method: 'POST',
+      body: JSON.stringify({ fund: currentSharedFundId, to_user: toUser, amount }),
+    });
+    showSharedFundNotice('Thanh toán đã được ghi nhận.', 'success');
+    amountInput.value = '';
+    await loadSelectedFundDetails(currentSharedFundId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Lỗi ghi thanh toán.';
+    showSharedFundNotice(message, 'error');
+  }
+}
+
+async function submitSharedFundInvite(event: SubmitEvent) {
+  event.preventDefault();
+  if (!currentSharedFundId) {
+    showSharedFundNotice('Vui lòng chọn quỹ trước khi mời thành viên.', 'error');
+    return;
+  }
+  const userIdInput = document.getElementById('shared-fund-invite-user-id') as HTMLInputElement | null;
+  const roleSelect = document.getElementById('shared-fund-invite-role') as HTMLSelectElement | null;
+  if (!userIdInput || !roleSelect) return;
+
+  const userId = Number(userIdInput.value);
+  const role = roleSelect.value;
+  if (!userId) {
+    showSharedFundNotice('Vui lòng nhập user ID.', 'error');
+    return;
+  }
+
+  try {
+    await fetchSharedFundData(`funds/${currentSharedFundId}/invite/`, {
+      method: 'POST',
+      body: JSON.stringify({ user: userId, role }),
+    });
+    showSharedFundNotice('Đã gửi lời mời thành viên.', 'success');
+    userIdInput.value = '';
+    await loadSelectedFundDetails(currentSharedFundId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Lỗi mời thành viên.';
+    showSharedFundNotice(message, 'error');
+  }
+}
+
+function toggleSharedFundExpanded() {
+  const panel = document.getElementById('shared-fund-expanded-panel');
+  if (!panel) return;
+  panel.classList.toggle('hidden');
+  const toggleBtn = document.getElementById('shared-fund-toggle-btn');
+  if (toggleBtn) {
+    toggleBtn.textContent = panel.classList.contains('hidden') ? 'Mở rộng chức năng' : 'Thu gọn chức năng';
+  }
+}
+
+function bindSharedFundEvents() {
+  document.getElementById('shared-fund-create-form')?.addEventListener('submit', createSharedFund);
+  document.getElementById('refresh-shared-fund-btn')?.addEventListener('click', () => loadSharedFunds().catch((error) => {
+    console.warn('⚠️ Failed to refresh shared fund', error);
+  }));
+  document.getElementById('shared-fund-toggle-btn')?.addEventListener('click', () => {
+    toggleSharedFundExpanded();
+    if (!document.getElementById('shared-fund-expanded-panel')?.classList.contains('hidden')) {
+      scrollToSharedFundSection();
+    }
+  });
+  document.getElementById('shared-fund-select')?.addEventListener('change', (event) => {
+    const value = (event.target as HTMLSelectElement).value;
+    const id = value ? Number(value) : null;
+    if (id) {
+      loadSelectedFundDetails(id);
+    }
+  });
+  document.getElementById('load-selected-fund-btn')?.addEventListener('click', () => {
+    const select = document.getElementById('shared-fund-select') as HTMLSelectElement | null;
+    const id = select?.value ? Number(select.value) : null;
+    if (id) loadSelectedFundDetails(id);
+  });
+  document.getElementById('shared-fund-expense-split-type')?.addEventListener('change', renderExpenseSplitDetails);
+  document.getElementById('shared-fund-expense-members')?.addEventListener('change', renderExpenseSplitDetails);
+  document.getElementById('shared-fund-expense-form')?.addEventListener('submit', submitSharedFundExpense);
+  document.getElementById('shared-fund-settlement-form')?.addEventListener('submit', submitSharedFundSettlement);
+  document.getElementById('shared-fund-invite-form')?.addEventListener('submit', submitSharedFundInvite);
+}
+
+async function createSharedFund(event: SubmitEvent) {
+  event.preventDefault();
+  const nameInput = document.getElementById('shared-fund-name') as HTMLInputElement | null;
+  const descriptionInput = document.getElementById('shared-fund-description') as HTMLTextAreaElement | null;
+  if (!nameInput || !descriptionInput) return;
+
+  const name = nameInput.value.trim();
+  const description = descriptionInput.value.trim();
+  if (!name) {
+    showSharedFundNotice('Vui lòng nhập tên quỹ.', 'error');
+    return;
+  }
+
+  try {
+    await fetchSharedFundData('funds/', {
+      method: 'POST',
+      body: JSON.stringify({ name, description }),
+    });
+    showSharedFundNotice('Tạo quỹ thành công.', 'success');
+    nameInput.value = '';
+    descriptionInput.value = '';
+    await loadSharedFunds();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Lỗi khi tạo quỹ.';
+    showSharedFundNotice(message, 'error');
+  }
+}
+
 // ============================================
 // GLOBAL AUTH UI INITIALIZATION
 // ============================================
@@ -280,10 +790,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Update navbar buttons immediately
     console.log("🔘 Running updateNavbar() to set correct navbar state...");
     updateNavbar();
+    updateSharedFundLinks();
+    bindSharedFundEvents();
     if (localStorage.getItem('isLoggedIn') === 'true') {
         // Nếu có token, đồng bộ avatar từ API hoặc localStorage ngay khi tải trang
         loadProfileData().catch((error) => {
             console.warn('⚠️ Failed to refresh profile avatar on load:', error);
+        });
+        loadSharedFunds().catch((error) => {
+            console.warn('⚠️ Failed to load shared fund data on load:', error);
         });
     }
     
@@ -851,6 +1366,10 @@ class ExpenseManager {
       document.getElementById('features-section')?.scrollIntoView({ behavior: 'smooth' });
     });
 
+    document.getElementById('landing-shared-fund-btn')?.addEventListener('click', () => {
+      this.openAuthModal('login');
+    });
+
     document.getElementById('landing-add-transaction-btn')?.addEventListener('click', () => {
       const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
       if (isLoggedIn) {
@@ -951,6 +1470,16 @@ class ExpenseManager {
       const descInput = document.getElementById('desc') as HTMLInputElement;
       descInput.focus();
     });
+    const openSharedFundPanel = () => {
+      const panel = document.getElementById('shared-fund-expanded-panel');
+      if (panel?.classList.contains('hidden')) {
+        toggleSharedFundExpanded();
+      }
+      scrollToSharedFundSection();
+    };
+
+    document.getElementById('header-shared-fund-btn')?.addEventListener('click', openSharedFundPanel);
+    document.getElementById('dashboard-shared-fund-btn')?.addEventListener('click', openSharedFundPanel);
     document.getElementById('fab-add')?.addEventListener('click', () => {
       this.formEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       const descInput = document.getElementById('desc') as HTMLInputElement;
