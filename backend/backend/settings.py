@@ -148,16 +148,16 @@ CSRF_TRUSTED_ORIGINS = [
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',  # ✅ ADD JWT Auth
+        'rest_framework_simplejwt.authentication.JWTAuthentication', 
         'rest_framework.authentication.TokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated', # THAY ĐỔI: Chỉ cho phép người đã đăng nhập
+        'rest_framework.permissions.IsAuthenticated', 
     ],
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
-        'rest_framework.renderers.BrowsableAPIRenderer', # Khuyến khích: Để xem giao diện API đẹp hơn
+        'rest_framework.renderers.BrowsableAPIRenderer',
     ],
 }
 
@@ -165,7 +165,6 @@ CSRF_USE_SESSIONS = False
 CSRF_COOKIE_SECURE = False
 CSRF_COOKIE_HTTPONLY = False
 
-# 14. Default fields
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 ROOT_URLCONF = 'backend.urls'
