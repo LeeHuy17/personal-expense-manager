@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'ai',
     'advisor',
     'shared_fund',
+    'search_filter',
     
     # Thêm DRF để làm API 
     'rest_framework',
@@ -96,15 +97,11 @@ TEMPLATES = [
     },
 ]
 
-# 7. Cấu hình Cơ sở dữ liệu MySQL (Theo Schema )
+# 7. Cấu hình Cơ sở dữ liệu SQLite (Tạm thời để test)
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'personal_expense_manager',
-        'USER': 'root',
-        'PASSWORD': 'lehuy173', 
-        'HOST': 'localhost',
-        'PORT': '3306',
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 

@@ -35,6 +35,11 @@ class Expense(models.Model):
 
     class Meta:
         ordering = ['-date']
+        indexes = [
+            models.Index(fields=['fund', 'date']),
+            models.Index(fields=['amount']),
+            models.Index(fields=['created_by']),
+        ]
 
     def __str__(self):
         return f'{self.fund.name} - {self.amount} by {self.created_by.username}'

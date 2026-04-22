@@ -1286,6 +1286,8 @@ class ExpenseManager {
   private chartContainer: HTMLElement;
   private searchInput: HTMLInputElement;
   private filterCategory: HTMLSelectElement;
+  private recentSearchesContainer: HTMLElement;
+  private recentSearchesList: HTMLElement;
   private budgetProgress: HTMLElement;
   private budgetPercent: HTMLElement;
   private budgetWarning: HTMLElement;
@@ -1298,6 +1300,7 @@ class ExpenseManager {
   private currentPage: number = 1;
   private itemsPerPage: number = 10;
   private sortBy: string = 'date-desc';
+  private searchTimeout?: ReturnType<typeof setTimeout>;
   private dateFrom: string = '';
   private dateTo: string = '';
 
@@ -1313,6 +1316,8 @@ class ExpenseManager {
     this.trendChartContainer = document.getElementById('trend-chart-container')!;
     this.searchInput = document.getElementById('search-input') as HTMLInputElement;
     this.filterCategory = document.getElementById('filter-category') as HTMLSelectElement;
+    this.recentSearchesContainer = document.getElementById('recent-searches')!;
+    this.recentSearchesList = document.getElementById('recent-searches-list')!;
     this.budgetProgress = document.getElementById('budget-progress') || ({} as HTMLElement);
     this.budgetPercent = document.getElementById('budget-percent') || ({} as HTMLElement);
     this.budgetWarning = document.getElementById('budget-warning') || ({} as HTMLElement);
@@ -1566,8 +1571,30 @@ class ExpenseManager {
     });
 
     this.searchInput.addEventListener('input', () => {
-      this.currentPage = 1;
-      this.renderList();
+      clearTimeout(this.searchTimeout);
+      this.searchTimeout = setTimeout(() => {
+        this.currentPage = 1;
+        this.renderList();
+      }, 500); // 500ms debounce
+    });
+
+    // Recent searches functionality
+    this.searchInput.addEventListener('focus', () => {
+      this.loadRecentSearches();
+    });
+
+    this.searchInput.addEventListener('blur', () => {
+      // Delay hiding to allow clicking on recent search items
+      setTimeout(() => {
+        this.hideRecentSearches();
+      }, 150);
+    });
+
+    // Hide recent searches when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!this.searchInput.contains(e.target as Node) && !this.recentSearchesContainer.contains(e.target as Node)) {
+        this.hideRecentSearches();
+      }
     });
     this.filterCategory.addEventListener('change', () => {
       this.currentPage = 1;
@@ -2004,6 +2031,19 @@ class ExpenseManager {
     localStorage.setItem('categories', JSON.stringify(this.categories));
     localStorage.setItem('categoryBudgets', JSON.stringify(this.categoryBudgets));
     localStorage.setItem('goals', JSON.stringify(this.goals));
+  }
+
+  private addMockData(): void {
+    const mockData: Transaction[] = [
+      { id: '1', description: 'Lương tháng 3', amount: 25000000, type: 'income', category: 'Lương', date: '2026-03-01T08:00:00Z' },
+      { id: '2', description: 'Ăn tối Sushi', amount: 850000, type: 'expense', category: 'Ăn uống', date: '2026-03-05T19:30:00Z' },
+      { id: '3', description: 'Tiền nhà', amount: 5000000, type: 'expense', category: 'Nhà cửa', date: '2026-03-02T10:00:00Z' },
+      { id: '4', description: 'Mua sắm Shopee', amount: 1200000, type: 'expense', category: 'Mua sắm', date: '2026-03-10T14:20:00Z' },
+      { id: '5', description: 'Đổ xăng', amount: 500000, type: 'expense', category: 'Di chuyển', date: '2026-03-12T09:00:00Z' },
+      { id: '6', description: 'Thưởng dự án', amount: 3000000, type: 'income', category: 'Lương', date: '2026-03-15T16:00:00Z' },
+    ];
+    this.transactions = mockData;
+    this.saveData();
   }
 
   private async addCategory() {
@@ -2905,26 +2945,169 @@ class ExpenseManager {
   }
 
   private renderList() {
+    const searchTerm = this.searchInput.value.trim();
+    
+    // If there's a search term, use API search
+    if (searchTerm) {
+      this.searchWithAPI();
+    } else {
+      // Use local filtering for no search term
+      this.renderLocalList();
+    }
+  }
+
+  private async searchWithAPI(): Promise<void> {
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      this.showToast('Vui lòng đăng nhập để sử dụng tìm kiếm nâng cao', 'error');
+      return;
+    }
+
+    const searchTerm = this.searchInput.value.trim();
+    const catFilter = this.filterCategory.value;
+    const dateFrom = this.dateFrom || '';
+    const dateTo = this.dateTo || '';
+
+    const params = new URLSearchParams({
+      keyword: searchTerm,
+      sort: this.sortBy,
+      page: this.currentPage.toString(),
+    });
+
+    if (catFilter !== 'all') params.append('category', catFilter);
+    if (dateFrom) params.append('dateFrom', dateFrom);
+    if (dateTo) params.append('dateTo', dateTo);
+
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/api/search/transactions/?${params}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Token ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        this.renderAPISearchResults(data);
+      } else {
+        // Fallback to local search if API fails
+        console.warn('API search failed, falling back to local search');
+        this.renderLocalList();
+      }
+    } catch (error) {
+      console.error('Error searching with API:', error);
+      this.renderLocalList();
+    }
+  }
+
+  private renderAPISearchResults(data: any): void {
+    const results = data.results || [];
+    const totalItems = data.count || results.length;
+    const totalPages = Math.ceil(totalItems / this.itemsPerPage);
+
+    // Update pagination info
+    const infoEl = document.getElementById('pagination-info')!;
+    if (totalItems > 0) {
+      const start = (this.currentPage - 1) * this.itemsPerPage + 1;
+      const end = Math.min(this.currentPage * this.itemsPerPage, totalItems);
+      infoEl.textContent = `Hiển thị ${start} - ${end} của ${totalItems} giao dịch`;
+    } else {
+      infoEl.textContent = 'Hiển thị 0 - 0 của 0 giao dịch';
+    }
+
+    // Render results
+    const listEl = this.listEl;
+    listEl.innerHTML = '';
+
+    if (results.length === 0) {
+      listEl.innerHTML = `
+        <div class="text-center py-12">
+          <i data-lucide="search-x" class="w-16 h-16 mx-auto text-slate-300 mb-4"></i>
+          <p class="text-slate-500">Không tìm thấy giao dịch nào</p>
+        </div>
+      `;
+    } else {
+      results.forEach((transaction: any) => {
+        const item = this.createTransactionItem(transaction);
+        listEl.appendChild(item);
+      });
+    }
+
+    // Update pagination
+    this.updatePagination(totalPages);
+
+    // Re-initialize icons
+    if (window.lucide) {
+      window.lucide.createIcons();
+    }
+  }
+
+  private createTransactionItem(transaction: any): HTMLElement {
+    const item = document.createElement('div');
+    
+    // Check if this is API response format or local format
+    const isAPIFormat = transaction.hasOwnProperty('highlighted_description');
+    
+    let description = transaction.description;
+    let category = transaction.category || transaction.category_name;
+    let type = transaction.type;
+    let amount = transaction.amount;
+    let date = transaction.date;
+    let primaryId = transaction.id;
+    
+    // For API format, use highlighted description
+    if (isAPIFormat) {
+      description = transaction.highlighted_description || transaction.description;
+    }
+    
+    // Find category object for icon and color
+    const categoryObj = this.categories.find(c => c.name === category) || { icon: 'tag', color: '#64748b' };
+    
+    // Create HTML
+    item.className = 'p-6 flex items-center justify-between hover:bg-orange-50/30 dark:hover:bg-slate-800 transition-all group animate-in slide-in-from-bottom-4 fade-in duration-500';
+    item.innerHTML = `
+      <div class="flex items-center gap-5">
+        <div class="w-12 h-12 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110" style="background-color: ${categoryObj.color}15; color: ${categoryObj.color}">
+          <i data-lucide="${categoryObj.icon}" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <p class="font-bold text-slate-900 dark:text-white group-hover:text-orange-600 transition-colors">${description}</p>
+          <div class="flex items-center gap-2 mt-1">
+            <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md" style="background-color: ${categoryObj.color}15; color: ${categoryObj.color}">${category || 'N/A'}</span>
+            <span class="text-[10px] font-medium text-slate-400">${new Date(date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+            ${isAPIFormat ? `<span class="text-[10px] font-medium text-slate-400">${transaction.fund_name ? `(${transaction.fund_name})` : ''}</span>` : ''}
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center gap-6">
+        <p class="font-black text-lg balance-value ${type === 'income' ? 'text-green-600' : type === 'expense' ? 'text-rose-600' : 'text-blue-600'}">
+          ${type === 'income' ? '+' : type === 'expense' ? '-' : ''}${this.formatCurrency(amount)}
+        </p>
+        ${!isAPIFormat ? `<button onclick="window.expenseManager.deleteTransaction('${primaryId}', '${type}')" class="p-2.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all rounded-xl opacity-0 group-hover:opacity-100" title="Xóa giao dịch này">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+        </button>` : ''}
+      </div>
+    `;
+    
+    return item;
+  }
+
+  private renderLocalList(): void {
     const filtered = this.getFilteredTransactions();
     const totalItems = filtered.length;
     const totalPages = Math.ceil(totalItems / this.itemsPerPage);
-    
-    if (this.currentPage > totalPages && totalPages > 0) this.currentPage = totalPages;
-    if (totalPages === 0) this.currentPage = 1;
-
     const start = (this.currentPage - 1) * this.itemsPerPage;
-    const end = start + this.itemsPerPage;
-    const paginated = filtered.slice(start, end);
+    const paginated = filtered.slice(start, start + this.itemsPerPage);
 
-    // Update Pagination Info
     const infoEl = document.getElementById('pagination-info')!;
     if (totalItems > 0) {
-      infoEl.textContent = `Hiển thị ${start + 1} - ${Math.min(end, totalItems)} của ${totalItems} giao dịch`;
+      const end = Math.min(this.currentPage * this.itemsPerPage, totalItems);
+      infoEl.textContent = `Hiển thị ${start + 1} - ${end} của ${totalItems} giao dịch`;
     } else {
-      infoEl.textContent = `Không có giao dịch nào`;
+      infoEl.textContent = 'Hiển thị 0 - 0 của 0 giao dịch';
     }
 
-    // Update Page Numbers
     const pageNumbersEl = document.getElementById('page-numbers')!;
     pageNumbersEl.innerHTML = '';
     for (let i = 1; i <= totalPages; i++) {
@@ -2945,7 +3128,6 @@ class ExpenseManager {
       }
     }
 
-    // Update Prev/Next buttons
     (document.getElementById('prev-page') as HTMLButtonElement).disabled = this.currentPage === 1;
     (document.getElementById('next-page') as HTMLButtonElement).disabled = this.currentPage === totalPages || totalPages === 0;
 
@@ -2964,12 +3146,11 @@ class ExpenseManager {
 
     this.listEl.innerHTML = paginated.map((t, index) => {
       const categoryObj = this.categories.find(c => c.name === t.category) || { icon: 'tag', color: '#64748b' };
-      // 🔑 Lấy đúng ID khóa chính (incomeId hoặc chiPhiId)
       const primaryId = t.type === 'income' ? t.incomeId : t.chiPhiId;
-      const displayId = primaryId || t.id; // Backup to t.id if primary key not found
-      
+      const displayId = primaryId || t.id;
+
       console.log(`🔍 [RENDER] Transaction - Type: ${t.type}, Primary ID: ${primaryId}, Display ID: ${displayId}`);
-      
+
       return `
       <div data-id="${displayId}" class="p-6 flex items-center justify-between hover:bg-orange-50/30 dark:hover:bg-slate-800 transition-all group animate-in slide-in-from-bottom-4 fade-in duration-500" style="animation-delay: ${index * 30}ms">
         <div class="flex items-center gap-5">
@@ -2993,12 +3174,38 @@ class ExpenseManager {
           </button>
         </div>
       </div>
-    `}).join('');
-    
+    `;
+    }).join('');
+
     if (this.isIncognito) {
       document.querySelectorAll('.balance-value').forEach(el => el.classList.add('incognito-blur'));
     }
     createIcons({ icons });
+  }
+
+  private updatePagination(totalPages: number): void {
+    const pageNumbersEl = document.getElementById('page-numbers')!;
+    pageNumbersEl.innerHTML = '';
+    for (let i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= this.currentPage - 1 && i <= this.currentPage + 1)) {
+        const btn = document.createElement('button');
+        btn.className = `w-8 h-8 rounded-lg text-xs font-bold transition-all ${i === this.currentPage ? 'bg-orange-600 text-white shadow-lg shadow-orange-200' : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-400'}`;
+        btn.textContent = i.toString();
+        btn.onclick = () => {
+          this.currentPage = i;
+          this.renderList();
+        };
+        pageNumbersEl.appendChild(btn);
+      } else if (i === this.currentPage - 2 || i === this.currentPage + 2) {
+        const span = document.createElement('span');
+        span.className = 'text-slate-300 px-1';
+        span.textContent = '...';
+        pageNumbersEl.appendChild(span);
+      }
+    }
+
+    (document.getElementById('prev-page') as HTMLButtonElement).disabled = this.currentPage === 1;
+    (document.getElementById('next-page') as HTMLButtonElement).disabled = this.currentPage === totalPages || totalPages === 0;
   }
 
   private renderChart() {
@@ -3334,23 +3541,70 @@ class ExpenseManager {
     }
   }
 
-  private addMockData() {
-    const mockData: Transaction[] = [
-      { id: '1', description: 'Lương tháng 3', amount: 25000000, type: 'income', category: 'Lương', date: '2026-03-01T08:00:00Z' },
-      { id: '2', description: 'Ăn tối Sushi', amount: 850000, type: 'expense', category: 'Ăn uống', date: '2026-03-05T19:30:00Z' },
-      { id: '3', description: 'Tiền nhà', amount: 5000000, type: 'expense', category: 'Nhà cửa', date: '2026-03-02T10:00:00Z' },
-      { id: '4', description: 'Mua sắm Shopee', amount: 1200000, type: 'expense', category: 'Mua sắm', date: '2026-03-10T14:20:00Z' },
-      { id: '5', description: 'Đổ xăng', amount: 500000, type: 'expense', category: 'Di chuyển', date: '2026-03-12T09:00:00Z' },
-      { id: '6', description: 'Thưởng dự án', amount: 3000000, type: 'income', category: 'Lương', date: '2026-03-15T16:00:00Z' },
-    ];
-    this.transactions = mockData;
-    this.saveData();
+  private async loadRecentSearches() {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        console.log('No token available for recent searches');
+        return;
+      }
+
+      const response = await fetch('http://127.0.0.1:8000/api/search/recent-searches/', {
+        headers: {
+          'Authorization': `Token ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        this.displayRecentSearches(data);
+      } else {
+        console.log('Failed to load recent searches:', response.status);
+      }
+    } catch (error) {
+      console.error('Error loading recent searches:', error);
+    }
+  }
+
+  private displayRecentSearches(searches: any[]) {
+    if (!searches || searches.length === 0) {
+      this.hideRecentSearches();
+      return;
+    }
+
+    this.recentSearchesList.innerHTML = searches.map(search => `
+      <div class="px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer transition-colors"
+           onclick="window.expenseManager.selectRecentSearch('${search.keyword}')">
+        <div class="flex items-center gap-2">
+          <i data-lucide="clock" class="w-4 h-4 text-slate-400"></i>
+          <span class="text-sm text-slate-700 dark:text-slate-300">${search.keyword}</span>
+        </div>
+      </div>
+    `).join('');
+
+    this.recentSearchesContainer.classList.remove('hidden');
+    createIcons({ icons });
+  }
+
+  private hideRecentSearches() {
+    this.recentSearchesContainer.classList.add('hidden');
+  }
+
+  public selectRecentSearch(keyword: string) {
+    this.searchInput.value = keyword;
+    this.hideRecentSearches();
+    this.currentPage = 1;
+    this.renderList();
   }
 }
 
 declare global {
   interface Window {
     expenseManager: ExpenseManager;
+    lucide?: {
+      createIcons: () => void;
+    };
   }
 }
 

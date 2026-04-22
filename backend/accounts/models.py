@@ -28,7 +28,7 @@ class PasswordResetRequest(models.Model):
         """Mark request là ready khi user click email link"""
         self.is_ready_to_reset = True
         self.save()
-    
+    # Override save method để tự động set expires_at khi tạo mới
     class Meta:
         verbose_name = "Password Reset Request"
         verbose_name_plural = "Password Reset Requests"
