@@ -8,8 +8,11 @@ import environ
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 env = environ.Env()
-# Đọc file .env.local
-environ.Env.read_env(os.path.join(BASE_DIR, '.env.local'))
+# Đọc file .env.local; nếu không tồn tại thì dùng .env
+env_file = os.path.join(BASE_DIR, '.env.local')
+if not os.path.exists(env_file):
+    env_file = os.path.join(BASE_DIR, '.env')
+environ.Env.read_env(env_file)
 
 # Cấu hình Email SMTP (Dùng chung cho cả Dev và Prod để test thật)
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -18,14 +21,21 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 
 # Đọc từ file .env.local
-EMAIL_HOST_USER = env('EMAIL_HOST_USER')
-EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD')
-DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL')
+EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='NOT_FOUND')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='NOT_FOUND')
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='NOT_FOUND')
+
+print("EMAIL_HOST_USER =", EMAIL_HOST_USER)
+print("EMAIL_HOST_PASSWORD =", EMAIL_HOST_PASSWORD)
+print("DEFAULT_FROM_EMAIL =", DEFAULT_FROM_EMAIL)
+
 
 
 # 2. Bảo mật & Chế độ Debug
 SECRET_KEY = 'django-insecure-dev-key'
 DEBUG = True  # Enable debug again
+GEMINI_API_KEY = env('GEMINI_API_KEY', default='')
+GEMINI_MODEL = env('GEMINI_MODEL', default='gemini-1.5-flash')
 ALLOWED_HOSTS = ['*']
 
 # 3. Định nghĩa các App
@@ -39,6 +49,10 @@ INSTALLED_APPS = [
     
     # App của bạn
     'expenses',
+    'ai',
+    'advisor',
+    'shared_fund',
+    'search_filter',
     
     # Thêm DRF để làm API 
     'rest_framework',
@@ -83,15 +97,11 @@ TEMPLATES = [
     },
 ]
 
-# 7. Cấu hình Cơ sở dữ liệu MySQL (Theo Schema )
+# 7. Cấu hình Cơ sở dữ liệu SQLite (Tạm thời để test)
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'personal_expense_manager',
-        'USER': 'root',
-        'PASSWORD': 'lehuy173', 
-        'HOST': 'localhost',
-        'PORT': '3306',
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
