@@ -4,23 +4,19 @@ import environ
 
 
 
-# 1. Cấu hình đường dẫn gốc
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 env = environ.Env()
-# Đọc file .env.local; nếu không tồn tại thì dùng .env
 env_file = os.path.join(BASE_DIR, '.env.local')
 if not os.path.exists(env_file):
     env_file = os.path.join(BASE_DIR, '.env')
 environ.Env.read_env(env_file)
 
-# Cấu hình Email SMTP (Dùng chung cho cả Dev và Prod để test thật)
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 
-# Đọc từ file .env.local
 EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='NOT_FOUND')
 EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='NOT_FOUND')
 DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='NOT_FOUND')
@@ -31,14 +27,12 @@ print("DEFAULT_FROM_EMAIL =", DEFAULT_FROM_EMAIL)
 
 
 
-# 2. Bảo mật & Chế độ Debug
 SECRET_KEY = 'django-insecure-dev-key'
-DEBUG = True  # Enable debug again
+DEBUG = True  
 GEMINI_API_KEY = env('GEMINI_API_KEY', default='')
 GEMINI_MODEL = env('GEMINI_MODEL', default='gemini-1.5-flash')
 ALLOWED_HOSTS = ['*']
 
-# 3. Định nghĩa các App
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -47,23 +41,19 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     
-    # App của bạn
     'expenses',
     'ai',
     'advisor',
     'shared_fund',
     
-    # Thêm DRF để làm API 
     'rest_framework',
-    'rest_framework.authtoken',  # ✅ Support cho Token authentication
+    'rest_framework.authtoken',  
     
-    # CORS support
     'corsheaders',
 
     'accounts',
 ]
 
-# 4. Cấu hình Middleware (CORS phải ở trên CsrfViewMiddleware)
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',  # 👈 PHẢI ở đầu tiên
     'django.middleware.security.SecurityMiddleware',
@@ -75,11 +65,9 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# 5. Cấu hình URL & WSGI
 ROOT_URLCONF = 'backend.urls'
 WSGI_APPLICATION = 'backend.wsgi.application'
 
-# 6. Cấu hình Templates (Đã sửa để tránh lỗi admin.E403)
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -96,7 +84,6 @@ TEMPLATES = [
     },
 ]
 
-# 7. Cấu hình Cơ sở dữ liệu MySQL (Theo Schema )
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
@@ -108,22 +95,18 @@ DATABASES = {
     }
 }
 
-# 8. Cấu hình Ngôn ngữ & Múi giờ
 LANGUAGE_CODE = 'vi-vn'
 TIME_ZONE = 'Asia/Ho_Chi_Minh'
 USE_I18N = True
 USE_TZ = True
 
-# 9. Cấu hình Tệp tĩnh (Static files)
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-# 10. Cấu hình Media files (For file uploads)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-# 11. Cấu hình CORS (Cho phép Frontend gọi API)
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:5173",
@@ -133,10 +116,8 @@ CORS_ALLOWED_ORIGINS = [
 
 CORS_ALLOW_CREDENTIALS = True
 
-# 👇 Cho phép TẤT CẢ các nguồn (Chỉ dùng khi Code Dev)
 CORS_ALLOW_ALL_ORIGINS = True
 
-# Cho phép các methods
 CORS_ALLOW_METHODS = [
     'DELETE',
     'GET',
@@ -146,7 +127,6 @@ CORS_ALLOW_METHODS = [
     'PUT',
 ]
 
-# Cho phép headers
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
@@ -159,7 +139,6 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
 ]
 
-# 11. Cấu hình CSRF (Tạm thời disable cho endpoints API)
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:5173",
@@ -167,7 +146,6 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:5173",
 ]
 
-# 12. Django REST Framework Config
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',  # ✅ ADD JWT Auth
@@ -183,7 +161,6 @@ REST_FRAMEWORK = {
     ],
 }
 
-# 13. CSRF Config
 CSRF_USE_SESSIONS = False
 CSRF_COOKIE_SECURE = False
 CSRF_COOKIE_HTTPONLY = False
