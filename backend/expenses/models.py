@@ -115,6 +115,20 @@ class ThuNhap(models.Model):
     def __str__(self):
         return f"{self.amount} - {self.user.username}"
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['user', 'date']),
+            models.Index(fields=['loai']),
+            models.Index(fields=['amount']),
+        ]
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['user', 'date']),
+            models.Index(fields=['loai']),
+            models.Index(fields=['amount']),
+        ]
+
 # ===================== CHI PHI (Expense) =====================
 class ChiPhi(models.Model):
     chiPhiId = models.AutoField(primary_key=True) # Đặt tên đồng bộ với incomeId

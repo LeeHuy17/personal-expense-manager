@@ -12,6 +12,7 @@ urlpatterns = [
     path('api/ai/', include('ai.urls')),
     path('api/advisor/', include('advisor.urls')),
     path('api/shared-fund/', include('shared_fund.urls')),
+    path('api/search/', include('search_filter.urls')),
     path('api/', include('expenses.urls')),
     path('shared-fund/', include('shared_fund.ui_urls')),
 ]
