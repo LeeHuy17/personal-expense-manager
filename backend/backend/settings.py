@@ -86,19 +86,10 @@ TEMPLATES = [
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'personal_expense_manager',
-        'USER': 'root',
-        'PASSWORD': 'lehuy173', 
-        'HOST': 'localhost',
-        'PORT': '3306',
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
-
-LANGUAGE_CODE = 'vi-vn'
-TIME_ZONE = 'Asia/Ho_Chi_Minh'
-USE_I18N = True
-USE_TZ = True
 
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
