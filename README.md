@@ -9,7 +9,7 @@ Dự án hiện đang được triển khai với các nhánh tính năng (featu
 | :--- | :--- | :--- |
 | `feature/user-avatar-upload` | Cập nhật & hiển thị ảnh đại diện người dùng | Đã hoàn thành |
 | `feature/shared-fund` | Tạo và quản lý quỹ chung giữa các user | Đã hoàn thành |
-| `feature/search-filter` | Lọc và tìm kiếm giao dịch thông minh | Đang phát triển |
+| `feature/search-filter` | Lọc và tìm kiếm giao dịch thông minh | Đã hoàn thành |
 | `feature/pagination` | Phân trang danh sách thu/chi | Đang phát triển |
 | `feature/backend-ui` | Quản lý giao diện backend (Admin/Dashboard) | Đang phát triển |
 | `feature/ai-advisor` | Tích hợp AI tư vấn tài chính | Đã hoàn thành |
