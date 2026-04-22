@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Invitation API</title>
+</head>
+<body>
+    <h1>Test Invitation API</h1>
+    <pre id="output"></pre>
+
+    <script>
+        const output = document.getElementById('output');
+
+        async function testAPI() {
+            const baseURL = 'http://127.0.0.1:8000';
+            
+            try {
+                // Step 1: Login as user 1
+                output.textContent += '\n=== Step 1: Login as user1@example.com ===\n';
+                const login1 = await fetch(`${baseURL}/api/accounts/login/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: 'user1@example.com',
+                        password: 'user1'
+                    })
+                });
+                const loginData1 = await login1.json();
+                output.textContent += JSON.stringify(loginData1, null, 2);
+
+                if (!login1.ok) {
+                    output.textContent += '\n❌ Login user1 failed\n';
+                    return;
+                }
+
+                const token1 = loginData1.access;
+                const userId1 = loginData1.id;
+                output.textContent += `\n✅ Token1: ${token1.substring(0, 20)}...\n`;
+
+                // Step 2: Get funds
+                output.textContent += '\n=== Step 2: Get funds ===\n';
+                const fundsList = await fetch(`${baseURL}/api/shared-fund/funds/`, {
+                    headers: { 'Authorization': `Token ${token1}` }
+                });
+                const funds = await fundsList.json();
+                output.textContent += JSON.stringify(funds, null, 2);
+
+                if (!Array.isArray(funds) || funds.length === 0) {
+                    output.textContent += '\n❌ No funds found\n';
+                    return;
+                }
+
+                const fundId = funds[0].id;
+                output.textContent += `\n✅ Using fund: ${fundId}\n`;
+
+                // Step 3: Get users
+                output.textContent += '\n=== Step 3: Check for user2 ===\n';
+                const usersResp = await fetch(`${baseURL}/api/accounts/users/`, {
+                    headers: { 'Authorization': `Token ${token1}` }
+                });
+                if (usersResp.ok) {
+                    const users = await usersResp.json();
+                    output.textContent += JSON.stringify(users, null, 2);
+                } else {
+                    output.textContent += '\n⚠️ Could not get users list\n';
+                }
+
+                // Step 4: Invite user 2
+                output.textContent += '\n=== Step 4: Send invitation to user 2 ===\n';
+                // We'll use a hardcoded user ID for now
+                const inviteResp = await fetch(`${baseURL}/api/shared-fund/funds/${fundId}/invite/`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Token ${token1}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        user: 2, // Assuming user 2 has ID 2
+                        role: 'member'
+                    })
+                });
+                const inviteData = await inviteResp.json();
+                output.textContent += JSON.stringify(inviteData, null, 2);
+
+                if (!inviteResp.ok) {
+                    output.textContent += '\n❌ Invite failed\n';
+                    return;
+                }
+
+                output.textContent += '\n✅ Invite sent\n';
+
+                // Step 5: Login as user 2
+                output.textContent += '\n=== Step 5: Login as user2@example.com ===\n';
+                const login2 = await fetch(`${baseURL}/api/accounts/login/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: 'user2@example.com',
+                        password: 'user2'
+                    })
+                });
+                const loginData2 = await login2.json();
+                output.textContent += JSON.stringify(loginData2, null, 2);
+
+                if (!login2.ok) {
+                    output.textContent += '\n❌ Login user2 failed\n';
+                    return;
+                }
+
+                const token2 = loginData2.access;
+                output.textContent += `\n✅ Token2: ${token2.substring(0, 20)}...\n`;
+
+                // Step 6: Get pending invitations
+                output.textContent += '\n=== Step 6: Get pending invitations for user2 ===\n';
+                const invitationsResp = await fetch(`${baseURL}/api/shared-fund/invitations/`, {
+                    headers: { 'Authorization': `Token ${token2}` }
+                });
+                const invitations = await invitationsResp.json();
+                output.textContent += JSON.stringify(invitations, null, 2);
+
+                if (Array.isArray(invitations) && invitations.length > 0) {
+                    output.textContent += '\n✅ Invitations found!\n';
+                } else {
+                    output.textContent += '\n❌ No invitations found\n';
+                }
+
+            } catch (error) {
+                output.textContent += '\n❌ Error: ' + error.message + '\n';
+            }
+        }
+
+        testAPI();
+    </script>
+</body>
+</html>

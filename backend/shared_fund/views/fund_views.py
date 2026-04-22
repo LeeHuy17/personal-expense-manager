@@ -3,8 +3,9 @@ from rest_framework import viewsets, permissions, serializers, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
-from shared_fund.models import SharedFund, FundMember
+from shared_fund.models import SharedFund, FundMember, FundInvitation
 from shared_fund.serializers.fund_serializer import SharedFundSerializer
+from shared_fund.serializers.invitation_serializer import FundInvitationSerializer
 from shared_fund.services.balance_service import calculate_fund_balances, calculate_settlement_plan
 
 User = get_user_model()
@@ -40,8 +41,16 @@ class SharedFundViewSet(viewsets.ModelViewSet):
         if FundMember.objects.filter(fund=fund, user=target_user).exists():
             return Response({'detail': 'Thành viên đã có trong quỹ.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        FundMember.objects.create(fund=fund, user=target_user, role=role)
-        return Response({'detail': 'Đã thêm thành viên vào quỹ.'}, status=status.HTTP_201_CREATED)
+        if FundInvitation.objects.filter(fund=fund, invitee=target_user, status=FundInvitation.STATUS_PENDING).exists():
+            return Response({'detail': 'Đã có lời mời đang chờ xử lý.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        FundInvitation.objects.create(
+            fund=fund,
+            inviter=request.user,
+            invitee=target_user,
+            role=role
+        )
+        return Response({'detail': 'Đã gửi lời mời tham gia quỹ.'}, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['get'], url_path='balances')
     def balances(self, request, pk=None):

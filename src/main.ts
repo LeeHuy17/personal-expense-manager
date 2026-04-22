@@ -45,8 +45,144 @@ function showSharedFundNotice(message: string, type: 'success' | 'error' | 'info
 let currentSharedFundId: number | null = null;
 let currentSharedFundMembers: any[] = [];
 
+// Notifications
+let currentInvitations: any[] = [];
+let invitationPollingInterval: any = null;
+let lastInvitationCount: number = 0;
+
 function roundToTwo(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+// Notifications functions
+async function loadInvitations() {
+  try {
+    const invitations = await fetchSharedFundData('invitations/', { method: 'GET' });
+    currentInvitations = invitations;
+    updateNotificationBadge();
+    
+    // If there's a new invitation and modal is open, update it
+    if (invitations.length > lastInvitationCount) {
+      const modal = document.getElementById('notifications-modal');
+      if (modal && !modal.classList.contains('hidden')) {
+        renderNotificationsModal();
+      }
+    }
+    lastInvitationCount = invitations.length;
+    
+    return invitations;
+  } catch (error) {
+    console.warn('Failed to load invitations:', error);
+    return [];
+  }
+}
+
+function startInvitationPolling() {
+  if (invitationPollingInterval) {
+    console.warn('Invitation polling already running');
+    return;
+  }
+  
+  console.log('Starting invitation polling (every 3 seconds)');
+  invitationPollingInterval = setInterval(async () => {
+    if (localStorage.getItem('isLoggedIn') === 'true') {
+      await loadInvitations();
+    }
+  }, 3000); // Poll every 3 seconds
+}
+
+function stopInvitationPolling() {
+  if (invitationPollingInterval) {
+    console.log('Stopping invitation polling');
+    clearInterval(invitationPollingInterval);
+    invitationPollingInterval = null;
+  }
+}
+
+function updateNotificationBadge() {
+  const badge = document.getElementById('notification-badge');
+  const count = currentInvitations.length;
+  if (badge) {
+    badge.textContent = count.toString();
+    badge.classList.toggle('hidden', count === 0);
+  }
+}
+
+function renderNotificationsModal() {
+  const list = document.getElementById('notifications-list');
+  const noNotifications = document.getElementById('no-notifications');
+  if (!list || !noNotifications) return;
+
+  if (currentInvitations.length === 0) {
+    list.innerHTML = '';
+    noNotifications.classList.remove('hidden');
+    return;
+  }
+
+  noNotifications.classList.add('hidden');
+  list.innerHTML = currentInvitations.map(invitation => `
+    <div class="rounded-2xl bg-slate-50 dark:bg-slate-800 p-4 border border-slate-100 dark:border-slate-700">
+      <div class="flex items-start justify-between gap-4">
+        <div class="flex-1">
+          <p class="text-sm font-bold text-slate-900 dark:text-white">
+            Lời mời tham gia quỹ: ${invitation.fund_name}
+          </p>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Từ: ${invitation.inviter_name} • ${new Date(invitation.created_at).toLocaleDateString('vi-VN')}
+          </p>
+        </div>
+        <div class="flex gap-2">
+          <button class="accept-invitation-btn px-3 py-1.5 rounded-xl bg-emerald-500 text-white text-xs font-bold hover:bg-emerald-600 transition-colors" data-invitation-id="${invitation.id}">
+            Chấp nhận
+          </button>
+          <button class="reject-invitation-btn px-3 py-1.5 rounded-xl bg-rose-500 text-white text-xs font-bold hover:bg-rose-600 transition-colors" data-invitation-id="${invitation.id}">
+            Từ chối
+          </button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  // Add event listeners
+  document.querySelectorAll('.accept-invitation-btn').forEach(btn => {
+    btn.addEventListener('click', handleAcceptInvitation);
+  });
+  document.querySelectorAll('.reject-invitation-btn').forEach(btn => {
+    btn.addEventListener('click', handleRejectInvitation);
+  });
+}
+
+async function handleAcceptInvitation(event: Event) {
+  const button = event.target as HTMLButtonElement;
+  const invitationId = button.getAttribute('data-invitation-id');
+  if (!invitationId) return;
+
+  try {
+    await fetchSharedFundData(`invitations/${invitationId}/accept/`, { method: 'POST' });
+    showSharedFundNotice('Đã chấp nhận lời mời tham gia quỹ.', 'success');
+    await loadInvitations();
+    renderNotificationsModal();
+    await loadSharedFunds();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Lỗi khi chấp nhận lời mời.';
+    showSharedFundNotice(message, 'error');
+  }
+}
+
+async function handleRejectInvitation(event: Event) {
+  const button = event.target as HTMLButtonElement;
+  const invitationId = button.getAttribute('data-invitation-id');
+  if (!invitationId) return;
+
+  try {
+    await fetchSharedFundData(`invitations/${invitationId}/reject/`, { method: 'POST' });
+    showSharedFundNotice('Đã từ chối lời mời tham gia quỹ.', 'success');
+    await loadInvitations();
+    renderNotificationsModal();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Lỗi khi từ chối lời mời.';
+    showSharedFundNotice(message, 'error');
+  }
 }
 
 function scrollToSharedFundSection() {
@@ -446,7 +582,7 @@ async function submitSharedFundInvite(event: SubmitEvent) {
     });
     showSharedFundNotice('Đã gửi lời mời thành viên.', 'success');
     userIdInput.value = '';
-    await loadSelectedFundDetails(currentSharedFundId);
+    await loadInvitations(); // Reload invitations to update badge
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Lỗi mời thành viên.';
     showSharedFundNotice(message, 'error');
@@ -491,6 +627,15 @@ function bindSharedFundEvents() {
   document.getElementById('shared-fund-expense-form')?.addEventListener('submit', submitSharedFundExpense);
   document.getElementById('shared-fund-settlement-form')?.addEventListener('submit', submitSharedFundSettlement);
   document.getElementById('shared-fund-invite-form')?.addEventListener('submit', submitSharedFundInvite);
+
+  // Notifications
+  document.getElementById('notifications-btn')?.addEventListener('click', () => {
+    renderNotificationsModal();
+    document.getElementById('notifications-modal')?.classList.remove('hidden');
+  });
+  document.getElementById('close-notifications-modal')?.addEventListener('click', () => {
+    document.getElementById('notifications-modal')?.classList.add('hidden');
+  });
 }
 
 async function createSharedFund(event: SubmitEvent) {
@@ -800,6 +945,11 @@ document.addEventListener('DOMContentLoaded', () => {
         loadSharedFunds().catch((error) => {
             console.warn('⚠️ Failed to load shared fund data on load:', error);
         });
+        loadInvitations().catch((error) => {
+            console.warn('⚠️ Failed to load invitations on load:', error);
+        });
+        // Start realtime polling for invitations
+        startInvitationPolling();
     }
     
     // Khởi tạo trang reset password nếu cần
@@ -1315,6 +1465,9 @@ class ExpenseManager {
   
    handleLogoutClick = () => {
       console.log('🔐 Logout button clicked');
+      
+      // Stop invitation polling
+      stopInvitationPolling();
       
       // 1. Clear all session data FIRST - before any reload
       localStorage.clear();
