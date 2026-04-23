@@ -4,22 +4,21 @@ from shared_fund.models import Expense as SharedExpense, FundMember
 from datetime import datetime
 from .utils import highlight_keyword
 from .models import RecentSearch
-import re
 
 
 class TransactionSearchService:
     def search_transactions(self, user, keyword='', date_from=None, date_to=None, category=None,
                         transaction_type=None, amount_min=None, amount_max=None, sort_by='date-desc'):
+        print(f"[DEBUG] TransactionSearchService.search_transactions called with: user={user.username}, keyword='{keyword}', date_from={date_from}, date_to={date_to}, category={category}, transaction_type={transaction_type}, sort_by='{sort_by}'")
         transactions = []
 
         # Personal expenses
         if transaction_type in [None, 'expense', 'all']:
             expenses = ChiPhi.objects.filter(user=user)
             if keyword:
-                # Escape special regex characters
-                escaped_keyword = re.escape(keyword)
+                keyword = keyword.strip()
                 expenses = expenses.filter(
-                    Q(moTa__iregex=escaped_keyword) | Q(loai__tenLoai__iregex=escaped_keyword)
+                    Q(moTa__icontains=keyword) | Q(loai__tenLoai__icontains=keyword)
                 )
             if date_from:
                 expenses = expenses.filter(date__gte=date_from)
@@ -49,9 +48,9 @@ class TransactionSearchService:
         if transaction_type in [None, 'income', 'all']:
             incomes = ThuNhap.objects.filter(user=user)
             if keyword:
-                escaped_keyword = re.escape(keyword)
+                keyword = keyword.strip()
                 incomes = incomes.filter(
-                    Q(moTa__iregex=escaped_keyword) | Q(loai__tenLoai__iregex=escaped_keyword)
+                    Q(moTa__icontains=keyword) | Q(loai__tenLoai__icontains=keyword)
                 )
             if date_from:
                 incomes = incomes.filter(date__gte=date_from)
@@ -83,8 +82,8 @@ class TransactionSearchService:
             user_funds = FundMember.objects.filter(user=user).values_list('fund', flat=True)
             shared_expenses = SharedExpense.objects.filter(fund__in=user_funds)
             if keyword:
-                escaped_keyword = re.escape(keyword)
-                shared_expenses = shared_expenses.filter(description__iregex=escaped_keyword)
+                keyword = keyword.strip()
+                shared_expenses = shared_expenses.filter(description__icontains=keyword)
             if date_from:
                 shared_expenses = shared_expenses.filter(date__gte=date_from)
             if date_to:
@@ -130,5 +129,6 @@ class TransactionSearchService:
                 defaults={}
             )
             # Keep only last 10 searches
-            recent_searches = RecentSearch.objects.filter(user=user).order_by('-searched_at')[10:]
-            recent_searches.delete()
+            recent_searches_to_delete = RecentSearch.objects.filter(user=user).order_by('-searched_at').values_list('pk', flat=True)[10:]
+            if recent_searches_to_delete:
+                RecentSearch.objects.filter(pk__in=list(recent_searches_to_delete)).delete()

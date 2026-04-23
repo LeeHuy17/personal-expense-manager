@@ -33,6 +33,7 @@ export interface PaginationParams {
   dateFrom?: string;
   dateTo?: string;
   type?: 'income' | 'expense' | 'shared' | 'all';
+  sort?: string;
 }
 
 export interface Transaction {

@@ -2297,7 +2297,7 @@ class ExpenseManager {
     const filterSelect = document.getElementById('filter-category') as HTMLSelectElement;
     const budgetSelect = document.getElementById('budget-category') as HTMLSelectElement;
 
-    const options = this.categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+    const options = this.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
     if (filterSelect) filterSelect.innerHTML = `<option value="all">Tất cả danh mục</option>` + options;
     if (budgetSelect) budgetSelect.innerHTML = options;
     
@@ -2417,7 +2417,7 @@ class ExpenseManager {
       // Send to API with JWT token
       const response = await axios.post(endpoint, {
         amount: amount,
-        description: desc,
+        moTa: desc,  // ✅ FIXED: Use 'moTa' instead of 'description' to match serializer
         loai: selectedCategoryId,
         date: new Date().toISOString().split('T')[0] // Ngày hôm nay (YYYY-MM-DD)
       }, {
@@ -2593,7 +2593,7 @@ class ExpenseManager {
   private populateBudgetCategorySelect() {
     const select = document.getElementById('budget-category') as HTMLSelectElement;
     if (select) {
-      select.innerHTML = this.categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+      select.innerHTML = this.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
     }
   }
 
@@ -3082,6 +3082,7 @@ class ExpenseManager {
         category: this.filterCategory.value && this.filterCategory.value !== 'all' ? this.filterCategory.value : undefined,
         dateFrom: this.dateFrom || undefined,
         dateTo: this.dateTo || undefined,
+        sort: this.sortBy,
       });
 
       this.transactions = this.paginationManager.getData();

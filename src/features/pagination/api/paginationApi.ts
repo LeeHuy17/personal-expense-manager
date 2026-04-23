@@ -87,6 +87,8 @@ function buildQueryParams(params: PaginationParams): URLSearchParams {
   if (params.dateFrom) queryParams.append('dateFrom', params.dateFrom);
   if (params.dateTo) queryParams.append('dateTo', params.dateTo);
 
+  if (params.sort) queryParams.append('sort', params.sort);
+
   return queryParams;
 }
 

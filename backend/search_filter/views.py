@@ -33,22 +33,35 @@ class TransactionSearchView(APIView):
         sort_by = request.query_params.get('sort', 'date-desc')
         page = request.query_params.get('page', 1)
 
+        # Debug logging
+        print(f"[DEBUG] Search params: keyword='{keyword}', date_from={date_from}, date_to={date_to}, category={category}, type={transaction_type}, sort='{sort_by}', page={page}")
+
         # Get user
         user = request.user
 
         # Use service to get filtered transactions
         service = TransactionSearchService()
-        transactions = service.search_transactions(
-            user=user,
-            keyword=keyword,
-            date_from=date_from,
-            date_to=date_to,
-            category=category,
-            transaction_type=transaction_type,
-            amount_min=amount_min,
-            amount_max=amount_max,
-            sort_by=sort_by
-        )
+        try:
+            transactions = service.search_transactions(
+                user=user,
+                keyword=keyword,
+                date_from=date_from,
+                date_to=date_to,
+                category=category,
+                transaction_type=transaction_type,
+                amount_min=amount_min,
+                amount_max=amount_max,
+                sort_by=sort_by
+            )
+        except Exception as e:
+            import traceback
+            print(f"[ERROR] TransactionSearchView.get failed: {e}")
+            print(traceback.format_exc())
+            return Response({
+                "thanhCong": False,
+                "thongBao": "Lỗi khi tìm kiếm giao dịch.",
+                "chiTiet": str(e)
+            }, status=500)
 
         # Save recent search if keyword provided
         if keyword:
