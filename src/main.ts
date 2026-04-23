@@ -11,6 +11,9 @@ import { handleLogin, handleForgotPassword, handleResetPasswordClick } from './a
 import { initResetPasswordPage, setupResetPasswordListeners } from './auth/reset-password';
 import { showForgotTab, showLoginTab, showResetTab } from './auth/ui-logic';
 
+// Pagination module
+import { createPaginationManager, createPaginationControls } from './features/pagination';
+
 const backendOrigin = (import.meta.env.VITE_BACKEND_URL as string) || (import.meta.env.VITE_API_BASE as string) || 'http://127.0.0.1:8000';
 const sharedFundApiBase = `${backendOrigin.replace(/\/$/, '')}/api/shared-fund/`;
 
@@ -1233,7 +1236,7 @@ interface Transaction {
   description: string;
   amount: number;
   type: 'income' | 'expense';
-  category: string;
+  category_name: string;
   categoryId?: number | string;
   date: string;
   incomeId?: number;  // 🔑 Primary key for income records
@@ -1304,6 +1307,13 @@ class ExpenseManager {
   private dateFrom: string = '';
   private dateTo: string = '';
 
+  // URL sync
+  private urlParams: URLSearchParams;
+
+  // Pagination module
+  private paginationManager: any;
+  private paginationControls: any;
+
   constructor() {
     this.landingView = document.getElementById('landing-view')!;
     this.dashboardView = document.getElementById('dashboard-view')!;
@@ -1311,6 +1321,10 @@ class ExpenseManager {
     this.incomeEl = document.getElementById('total-income')!;
     this.expenseEl = document.getElementById('total-expense')!;
     this.listEl = document.getElementById('transaction-list')!;
+
+    // Initialize URL params
+    this.urlParams = new URLSearchParams(window.location.search);
+    this.loadFiltersFromURL();
     this.formEl = document.getElementById('transaction-form') as HTMLFormElement;
     this.chartContainer = document.getElementById('chart-container')!;
     this.trendChartContainer = document.getElementById('trend-chart-container')!;
@@ -1331,6 +1345,10 @@ class ExpenseManager {
     this.init();
     this.setupEventListeners();
     this.setupBudgetEvents();
+
+    // Initialize pagination manager
+    const token = localStorage.getItem('accessToken') || '';
+    this.paginationManager = createPaginationManager(token, 10);
     
     // Check login state
     this.isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
@@ -1572,9 +1590,9 @@ class ExpenseManager {
 
     this.searchInput.addEventListener('input', () => {
       clearTimeout(this.searchTimeout);
-      this.searchTimeout = setTimeout(() => {
+      this.searchTimeout = setTimeout(async () => {
         this.currentPage = 1;
-        this.renderList();
+        await this.handleFilterChange();
       }, 500); // 500ms debounce
     });
 
@@ -1596,42 +1614,37 @@ class ExpenseManager {
         this.hideRecentSearches();
       }
     });
-    this.filterCategory.addEventListener('change', () => {
+    this.filterCategory.addEventListener('change', async () => {
       this.currentPage = 1;
-      this.renderList();
+      await this.handleFilterChange();
     });
 
-    document.getElementById('filter-date-from')?.addEventListener('change', (e) => {
+    document.getElementById('filter-date-from')?.addEventListener('change', async (e) => {
       this.dateFrom = (e.target as HTMLInputElement).value;
       this.currentPage = 1;
-      this.renderList();
+      await this.handleFilterChange();
     });
 
-    document.getElementById('filter-date-to')?.addEventListener('change', (e) => {
+    document.getElementById('filter-date-to')?.addEventListener('change', async (e) => {
       this.dateTo = (e.target as HTMLInputElement).value;
       this.currentPage = 1;
-      this.renderList();
+      await this.handleFilterChange();
     });
 
-    document.getElementById('sort-by')?.addEventListener('change', (e) => {
+    document.getElementById('sort-by')?.addEventListener('change', async (e) => {
       this.sortBy = (e.target as HTMLSelectElement).value;
-      this.renderList();
+      this.currentPage = 1;
+      await this.handleFilterChange();
     });
 
-    document.getElementById('prev-page')?.addEventListener('click', () => {
-      if (this.currentPage > 1) {
-        this.currentPage--;
-        this.renderList();
-      }
+    document.getElementById('clear-all')?.addEventListener('click', async () => {
+      await this.clearFilters();
     });
 
-    document.getElementById('next-page')?.addEventListener('click', () => {
-      const totalPages = Math.ceil(this.getFilteredTransactions().length / this.itemsPerPage);
-      if (this.currentPage < totalPages) {
-        this.currentPage++;
-        this.renderList();
-      }
-    });
+    // Existing legacy controls are no longer used by the modular pagination component
+    document.getElementById('prev-page')?.classList.add('hidden');
+    document.getElementById('next-page')?.classList.add('hidden');
+    document.getElementById('page-numbers')?.classList.add('hidden');
 
     // Input formatting
     const amountInput = document.getElementById('amount') as HTMLInputElement;
@@ -2035,12 +2048,12 @@ class ExpenseManager {
 
   private addMockData(): void {
     const mockData: Transaction[] = [
-      { id: '1', description: 'Lương tháng 3', amount: 25000000, type: 'income', category: 'Lương', date: '2026-03-01T08:00:00Z' },
-      { id: '2', description: 'Ăn tối Sushi', amount: 850000, type: 'expense', category: 'Ăn uống', date: '2026-03-05T19:30:00Z' },
-      { id: '3', description: 'Tiền nhà', amount: 5000000, type: 'expense', category: 'Nhà cửa', date: '2026-03-02T10:00:00Z' },
-      { id: '4', description: 'Mua sắm Shopee', amount: 1200000, type: 'expense', category: 'Mua sắm', date: '2026-03-10T14:20:00Z' },
-      { id: '5', description: 'Đổ xăng', amount: 500000, type: 'expense', category: 'Di chuyển', date: '2026-03-12T09:00:00Z' },
-      { id: '6', description: 'Thưởng dự án', amount: 3000000, type: 'income', category: 'Lương', date: '2026-03-15T16:00:00Z' },
+      { id: '1', description: 'Lương tháng 3', amount: 25000000, type: 'income', category_name: 'Lương', date: '2026-03-01T08:00:00Z' },
+      { id: '2', description: 'Ăn tối Sushi', amount: 850000, type: 'expense', category_name: 'Ăn uống', date: '2026-03-05T19:30:00Z' },
+      { id: '3', description: 'Tiền nhà', amount: 5000000, type: 'expense', category_name: 'Nhà cửa', date: '2026-03-02T10:00:00Z' },
+      { id: '4', description: 'Mua sắm Shopee', amount: 1200000, type: 'expense', category_name: 'Mua sắm', date: '2026-03-10T14:20:00Z' },
+      { id: '5', description: 'Đổ xăng', amount: 500000, type: 'expense', category_name: 'Di chuyển', date: '2026-03-12T09:00:00Z' },
+      { id: '6', description: 'Thưởng dự án', amount: 3000000, type: 'income', category_name: 'Lương', date: '2026-03-15T16:00:00Z' },
     ];
     this.transactions = mockData;
     this.saveData();
@@ -2284,7 +2297,7 @@ class ExpenseManager {
     const filterSelect = document.getElementById('filter-category') as HTMLSelectElement;
     const budgetSelect = document.getElementById('budget-category') as HTMLSelectElement;
 
-    const options = this.categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+    const options = this.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
     if (filterSelect) filterSelect.innerHTML = `<option value="all">Tất cả danh mục</option>` + options;
     if (budgetSelect) budgetSelect.innerHTML = options;
     
@@ -2381,7 +2394,7 @@ class ExpenseManager {
       description: desc,
       amount,
       type,
-      category: categoryName,
+      category_name: categoryName,
       categoryId: selectedCategoryId,
       date: new Date().toISOString()
     };
@@ -2404,7 +2417,7 @@ class ExpenseManager {
       // Send to API with JWT token
       const response = await axios.post(endpoint, {
         amount: amount,
-        description: desc,
+        moTa: desc,  // ✅ FIXED: Use 'moTa' instead of 'description' to match serializer
         loai: selectedCategoryId,
         date: new Date().toISOString().split('T')[0] // Ngày hôm nay (YYYY-MM-DD)
       }, {
@@ -2529,7 +2542,7 @@ class ExpenseManager {
     if (!budget || budget <= 0) return;
 
     const totalExpense = this.transactions
-      .filter(t => t.type === 'expense' && t.category === category && new Date(t.date).getMonth() === new Date().getMonth())
+      .filter(t => t.type === 'expense' && t.category_name === category && new Date(t.date).getMonth() === new Date().getMonth())
       .reduce((acc, t) => acc + t.amount, 0);
 
     if (totalExpense > budget) {
@@ -2580,7 +2593,7 @@ class ExpenseManager {
   private populateBudgetCategorySelect() {
     const select = document.getElementById('budget-category') as HTMLSelectElement;
     if (select) {
-      select.innerHTML = this.categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+      select.innerHTML = this.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
     }
   }
 
@@ -2616,11 +2629,66 @@ class ExpenseManager {
 
   // 📥 Load data from API and re-render (called on initial load and after login)
   private async loadAndRender(skipAlerts: boolean = false): Promise<void> {
-    console.log('🔄 loadAndRender() called - fetching data from API...');
-    const fetchedTransactions = await this.fetchTransactions();
-    this.transactions = fetchedTransactions;
-    console.log('✅ Transactions updated:', this.transactions.length, 'items');
+    console.log('🔄 loadAndRender() called - using pagination manager...');
+    
+    // If logged in, use pagination API
+    if (this.isLoggedIn) {
+      const token = localStorage.getItem('accessToken') || '';
+      this.paginationManager.updateToken(token);
+      
+      try {
+        // Load first page with current filters
+        await this.paginationManager.loadPage({
+          page: 1,
+          page_size: this.itemsPerPage,
+          keyword: this.searchInput?.value.trim() || '',
+          category: this.filterCategory?.value && this.filterCategory.value !== 'all' ? this.filterCategory.value : undefined,
+          dateFrom: this.dateFrom || undefined,
+          dateTo: this.dateTo || undefined,
+        });
+
+        const paginatedData = this.paginationManager.getData();
+        this.transactions = paginatedData;
+        console.log('✅ Transactions loaded via pagination:', paginatedData.length, 'items');
+      } catch (error) {
+        console.error('❌ Pagination error:', error);
+        // Fallback: fetch all
+        const fetchedTransactions = await this.fetchTransactions();
+        this.transactions = fetchedTransactions;
+      }
+    } else {
+      // Fallback: fetch all from localStorage
+      const fetchedTransactions = await this.fetchTransactions();
+      this.transactions = fetchedTransactions;
+    }
+
     this.render(skipAlerts);
+    this.renderPaginationControls();
+  }
+
+  /**
+   * Render pagination controls
+   */
+  private renderPaginationControls(): void {
+    const paginationContainer = document.getElementById('pagination-controls');
+    if (!paginationContainer) {
+      console.warn('⚠️ Pagination container not found');
+      return;
+    }
+
+    const state = this.paginationManager?.getState();
+    if (!state) return;
+
+    // Setup controls with handlers
+    this.paginationControls = createPaginationControls(
+      'pagination-controls',
+      state,
+      {
+        onPrevious: () => this.handlePrevPage(),
+        onNext: () => this.handleNextPage(),
+        onPageClick: (page: number) => this.handlePageClick(page),
+      }
+    );
   }
 
   private render(skipAlerts: boolean = false) {
@@ -2645,7 +2713,7 @@ class ExpenseManager {
       const spent = this.transactions
         .filter(t => {
           const d = new Date(t.date);
-          return t.type === 'expense' && t.category === category && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+          return t.type === 'expense' && t.category_name === category && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
         })
         .reduce((sum, t) => sum + t.amount, 0);
 
@@ -2676,7 +2744,7 @@ class ExpenseManager {
       const spent = this.transactions
         .filter(t => {
           const d = new Date(t.date);
-          return t.type === 'expense' && t.category === category && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+          return t.type === 'expense' && t.category_name === category && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
         })
         .reduce((sum, t) => sum + t.amount, 0);
       
@@ -2890,7 +2958,7 @@ class ExpenseManager {
         description: `Tiết kiệm cho: ${this.goals[goalIndex].name}`,
         amount,
         type: 'expense',
-        category: 'Khác',
+        category_name: 'Khác',
         date: new Date().toISOString()
       };
       this.transactions.unshift(transaction);
@@ -2913,8 +2981,8 @@ class ExpenseManager {
     const catFilter = this.filterCategory.value;
 
     let filtered = this.transactions.filter(t => {
-      const matchesSearch = t.description.toLowerCase().includes(searchTerm) || t.category.toLowerCase().includes(searchTerm);
-      const matchesCat = catFilter === 'all' || t.category === catFilter;
+      const matchesSearch = t.description.toLowerCase().includes(searchTerm) || t.category_name.toLowerCase().includes(searchTerm);
+      const matchesCat = catFilter === 'all' || t.category_name === catFilter;
       
       let matchesDate = true;
       if (this.dateFrom) {
@@ -2936,7 +3004,7 @@ class ExpenseManager {
         case 'date-asc': return new Date(a.date).getTime() - new Date(b.date).getTime();
         case 'amount-desc': return b.amount - a.amount;
         case 'amount-asc': return a.amount - b.amount;
-        case 'category': return a.category.localeCompare(b.category);
+        case 'category': return a.category_name.localeCompare(b.category_name);
         default: return 0;
       }
     });
@@ -2945,15 +3013,263 @@ class ExpenseManager {
   }
 
   private renderList() {
-    const searchTerm = this.searchInput.value.trim();
-    
-    // If there's a search term, use API search
-    if (searchTerm) {
-      this.searchWithAPI();
+    if (this.isLoggedIn) {
+      this.renderPaginatedList();
     } else {
-      // Use local filtering for no search term
       this.renderLocalList();
     }
+  }
+
+  private renderPaginatedList(): void {
+    if (this.transactions.length === 0) {
+      this.listEl.innerHTML = `
+        <div class="py-20 text-center text-slate-300 animate-in fade-in duration-700">
+          <div class="w-20 h-20 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+            <i data-lucide="search-x" class="w-10 h-10 opacity-20"></i>
+          </div>
+          <p class="font-medium text-slate-400">Không tìm thấy giao dịch nào...</p>
+        </div>
+      `;
+      createIcons({ icons });
+      return;
+    }
+
+    this.listEl.innerHTML = this.transactions.map((t) => {
+      const categoryObj = this.categories.find(c => c.name === t.category_name || c.id === t.category_name) || { icon: 'tag', color: '#64748b' };
+      const displayId = t.id;
+
+      return `
+      <div data-id="${displayId}" class="p-6 flex items-center justify-between hover:bg-orange-50/30 dark:hover:bg-slate-800 transition-all group animate-in slide-in-from-bottom-4 fade-in duration-500">
+        <div class="flex items-center gap-5">
+          <div class="w-12 h-12 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110" style="background-color: ${categoryObj.color}15; color: ${categoryObj.color}">
+            <i data-lucide="${categoryObj.icon}" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <p class="font-bold text-slate-900 dark:text-white group-hover:text-orange-600 transition-colors">${t.description}</p>
+            <div class="flex items-center gap-2 mt-1">
+              <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md" style="background-color: ${categoryObj.color}15; color: ${categoryObj.color}">${t.category_name || 'N/A'}</span>
+              <span class="text-[10px] font-medium text-slate-400">${new Date(t.date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-6">
+          <p class="font-black text-lg balance-value ${t.type === 'income' ? 'text-green-600' : t.type === 'expense' ? 'text-rose-600' : 'text-blue-600'}">
+            ${t.type === 'income' ? '+' : t.type === 'expense' ? '-' : ''}${this.formatCurrency(t.amount)}
+          </p>
+          <button onclick="window.expenseManager.deleteTransaction('${displayId}', '${t.type}')" class="p-2.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all rounded-xl opacity-0 group-hover:opacity-100" title="Xóa giao dịch này">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+    `;
+    }).join('');
+
+    if (this.isIncognito) {
+      document.querySelectorAll('.balance-value').forEach(el => el.classList.add('incognito-blur'));
+    }
+    createIcons({ icons });
+  }
+
+  private async loadPaginatedTransactions(page: number = 1): Promise<void> {
+    try {
+      const token = localStorage.getItem('accessToken') || '';
+      this.paginationManager.updateToken(token);
+
+      await this.paginationManager.loadPage({
+        page,
+        page_size: this.itemsPerPage,
+        keyword: this.searchInput.value.trim(),
+        category: this.filterCategory.value && this.filterCategory.value !== 'all' ? this.filterCategory.value : undefined,
+        dateFrom: this.dateFrom || undefined,
+        dateTo: this.dateTo || undefined,
+        sort: this.sortBy,
+      });
+
+      this.transactions = this.paginationManager.getData();
+      this.render(true);
+      this.renderPaginationControls();
+    } catch (error) {
+      console.error('Failed to load paginated transactions:', error);
+      const fetchedTransactions = await this.fetchTransactions();
+      this.transactions = fetchedTransactions;
+      this.render(true);
+    }
+  }
+
+  private async handleFilterChange(): Promise<void> {
+    if (this.isLoggedIn) {
+      await this.loadPaginatedTransactions(1);
+    } else {
+      this.render();
+    }
+    this.syncFiltersToURL();
+  }
+
+  /**
+   * Sync current filter values to URL
+   */
+  private syncFiltersToURL(): void {
+    const params = new URLSearchParams();
+
+    // Add search keyword
+    const keyword = this.searchInput?.value.trim();
+    if (keyword) {
+      params.set('keyword', keyword);
+    }
+
+    // Add category filter
+    const category = this.filterCategory?.value;
+    if (category && category !== 'all') {
+      params.set('category', category);
+    }
+
+    // Add date filters
+    if (this.dateFrom) {
+      params.set('dateFrom', this.dateFrom);
+    }
+    if (this.dateTo) {
+      params.set('dateTo', this.dateTo);
+    }
+
+    // Add sort
+    if (this.sortBy && this.sortBy !== 'date-desc') {
+      params.set('sort', this.sortBy);
+    }
+
+    // Add page (only if not page 1)
+    if (this.currentPage > 1) {
+      params.set('page', this.currentPage.toString());
+    }
+
+    // Update URL without reloading page
+    const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname;
+    window.history.replaceState({}, '', newUrl);
+  }
+
+  /**
+   * Load filter values from URL parameters
+   */
+  private loadFiltersFromURL(): void {
+    const params = new URLSearchParams(window.location.search);
+
+    // Load search keyword
+    const keyword = params.get('keyword');
+    if (keyword && this.searchInput) {
+      this.searchInput.value = keyword;
+    }
+
+    // Load category filter
+    const category = params.get('category');
+    if (category && this.filterCategory) {
+      this.filterCategory.value = category;
+    }
+
+    // Load date filters
+    const dateFrom = params.get('dateFrom');
+    if (dateFrom) {
+      this.dateFrom = dateFrom;
+      const dateFromEl = document.getElementById('filter-date-from') as HTMLInputElement;
+      if (dateFromEl) dateFromEl.value = dateFrom;
+    }
+
+    const dateTo = params.get('dateTo');
+    if (dateTo) {
+      this.dateTo = dateTo;
+      const dateToEl = document.getElementById('filter-date-to') as HTMLInputElement;
+      if (dateToEl) dateToEl.value = dateTo;
+    }
+
+    // Load sort
+    const sort = params.get('sort');
+    if (sort) {
+      this.sortBy = sort;
+      const sortEl = document.getElementById('sort-by') as HTMLSelectElement;
+      if (sortEl) sortEl.value = sort;
+    }
+
+    // Load page
+    const page = params.get('page');
+    if (page) {
+      this.currentPage = parseInt(page, 10) || 1;
+    }
+  }
+
+  /**
+   * Clear all filters and reset to default state
+   */
+  private async clearFilters(): Promise<void> {
+    // Reset search input
+    if (this.searchInput) {
+      this.searchInput.value = '';
+    }
+
+    // Reset category filter
+    if (this.filterCategory) {
+      this.filterCategory.value = 'all';
+    }
+
+    // Reset date filters
+    this.dateFrom = '';
+    this.dateTo = '';
+    const dateFromEl = document.getElementById('filter-date-from') as HTMLInputElement;
+    const dateToEl = document.getElementById('filter-date-to') as HTMLInputElement;
+    if (dateFromEl) dateFromEl.value = '';
+    if (dateToEl) dateToEl.value = '';
+
+    // Reset sort
+    this.sortBy = 'date-desc';
+    const sortEl = document.getElementById('sort-by') as HTMLSelectElement;
+    if (sortEl) sortEl.value = 'date-desc';
+
+    // Reset page
+    this.currentPage = 1;
+
+    // Update URL
+    window.history.replaceState({}, '', window.location.pathname);
+
+    // Re-render
+    if (this.isLoggedIn) {
+      await this.loadPaginatedTransactions(1);
+    } else {
+      this.render();
+    }
+  }
+
+  private async handlePageClick(page: number): Promise<void> {
+    if (!this.isLoggedIn) {
+      this.currentPage = page;
+      this.render();
+      return;
+    }
+
+    await this.loadPaginatedTransactions(page);
+  }
+
+  private async handleNextPage(): Promise<void> {
+    if (!this.isLoggedIn) {
+      const totalPages = Math.ceil(this.getFilteredTransactions().length / this.itemsPerPage);
+      if (this.currentPage < totalPages) {
+        this.currentPage += 1;
+        this.render();
+      }
+      return;
+    }
+
+    const nextPage = this.paginationManager?.getState().currentPage + 1;
+    await this.loadPaginatedTransactions(nextPage);
+  }
+
+  private async handlePrevPage(): Promise<void> {
+    if (!this.isLoggedIn) {
+      if (this.currentPage > 1) {
+        this.currentPage -= 1;
+        this.render();
+      }
+      return;
+    }
+
+    const prevPage = this.paginationManager?.getState().currentPage - 1;
+    await this.loadPaginatedTransactions(prevPage);
   }
 
   private async searchWithAPI(): Promise<void> {
@@ -3145,7 +3461,7 @@ class ExpenseManager {
     }
 
     this.listEl.innerHTML = paginated.map((t, index) => {
-      const categoryObj = this.categories.find(c => c.name === t.category) || { icon: 'tag', color: '#64748b' };
+      const categoryObj = this.categories.find(c => c.name === t.category_name) || { icon: 'tag', color: '#64748b' };
       const primaryId = t.type === 'income' ? t.incomeId : t.chiPhiId;
       const displayId = primaryId || t.id;
 
@@ -3160,7 +3476,7 @@ class ExpenseManager {
           <div>
             <p class="font-bold text-slate-900 dark:text-white group-hover:text-orange-600 transition-colors">${t.description}</p>
             <div class="flex items-center gap-2 mt-1">
-              <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md" style="background-color: ${categoryObj.color}15; color: ${categoryObj.color}">${t.category}</span>
+              <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md" style="background-color: ${categoryObj.color}15; color: ${categoryObj.color}">${t.category_name}</span>
               <span class="text-[10px] font-medium text-slate-400">${new Date(t.date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
             </div>
           </div>
@@ -3226,7 +3542,7 @@ class ExpenseManager {
     const categoryData = d3.rollups(
       expenses,
       v => d3.sum(v, d => d.amount),
-      d => d.category
+      d => d.category_name
     ).map(([name, value]) => ({ name, value }));
 
     const width = 280;

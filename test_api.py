@@ -14,17 +14,17 @@ if response.status_code == 200:
     token = response.json().get('access')
     print(f"Token: {token}")
 
-    # Test search
+    # Test pagination
     search_url = 'http://127.0.0.1:8000/api/search/transactions/'
     headers = {
         'Authorization': f'Token {token}',
         'Content-Type': 'application/json'
     }
-    params = {'keyword': 'test'}
+    params = {'page': 1, 'page_size': 5}
 
     search_response = requests.get(search_url, headers=headers, params=params)
-    print(f"Search status: {search_response.status_code}")
-    print(f"Search response: {search_response.json()}")
+    print(f"Pagination status: {search_response.status_code}")
+    print(f"Pagination response: {search_response.json()}")
 
     # Test recent searches
     recent_url = 'http://127.0.0.1:8000/api/search/recent/'
