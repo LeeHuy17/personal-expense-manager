@@ -10,10 +10,16 @@ from .serializers import TransactionSerializer
 from .filters import parse_date, parse_float, parse_int
 
 
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 50
+
+
 @method_decorator(cache_page(60), name='dispatch')  # Cache for 60 seconds
 class TransactionSearchView(APIView):
     permission_classes = [IsAuthenticated]
-    pagination_class = PageNumberPagination
+    pagination_class = StandardResultsSetPagination
 
     def get(self, request):
         # Extract query parameters
@@ -55,7 +61,25 @@ class TransactionSearchView(APIView):
         # Serialize
         serializer = TransactionSerializer(paginated_transactions, many=True)
 
-        return paginator.get_paginated_response(serializer.data)
+        # Tính toán thông tin phân trang theo yêu cầu
+        current_page = paginator.page.number
+        total_pages = paginator.page.paginator.num_pages
+        total_items = paginator.page.paginator.count
+        page_size = paginator.page_size
+
+        # Trả về response theo cấu trúc yêu cầu
+        return Response({
+            "thanhCong": True,
+            "duLieu": serializer.data,
+            "phanTrang": {
+                "trangHienTai": current_page,
+                "soItemMoiTrang": page_size,
+                "tongSoTrang": total_pages,
+                "tongSoItem": total_items,
+                "coTrangTruoc": current_page > 1,
+                "coTrangSau": current_page < total_pages
+            }
+        })
 
 
 class RecentSearchView(APIView):

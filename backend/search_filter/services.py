@@ -4,19 +4,22 @@ from shared_fund.models import Expense as SharedExpense, FundMember
 from datetime import datetime
 from .utils import highlight_keyword
 from .models import RecentSearch
+import re
 
 
 class TransactionSearchService:
     def search_transactions(self, user, keyword='', date_from=None, date_to=None, category=None,
-                           transaction_type=None, amount_min=None, amount_max=None, sort_by='date-desc'):
+                        transaction_type=None, amount_min=None, amount_max=None, sort_by='date-desc'):
         transactions = []
 
         # Personal expenses
-        if transaction_type in [None, 'expense']:
+        if transaction_type in [None, 'expense', 'all']:
             expenses = ChiPhi.objects.filter(user=user)
             if keyword:
+                # Escape special regex characters
+                escaped_keyword = re.escape(keyword)
                 expenses = expenses.filter(
-                    Q(moTa__icontains=keyword) | Q(loai__tenLoai__icontains=keyword)
+                    Q(moTa__iregex=escaped_keyword) | Q(loai__tenLoai__iregex=escaped_keyword)
                 )
             if date_from:
                 expenses = expenses.filter(date__gte=date_from)
@@ -43,11 +46,12 @@ class TransactionSearchService:
                 })
 
         # Personal incomes
-        if transaction_type in [None, 'income']:
+        if transaction_type in [None, 'income', 'all']:
             incomes = ThuNhap.objects.filter(user=user)
             if keyword:
+                escaped_keyword = re.escape(keyword)
                 incomes = incomes.filter(
-                    Q(moTa__icontains=keyword) | Q(loai__tenLoai__icontains=keyword)
+                    Q(moTa__iregex=escaped_keyword) | Q(loai__tenLoai__iregex=escaped_keyword)
                 )
             if date_from:
                 incomes = incomes.filter(date__gte=date_from)
@@ -74,12 +78,13 @@ class TransactionSearchService:
                 })
 
         # Shared expenses
-        if transaction_type in [None, 'shared']:
+        if transaction_type in [None, 'shared', 'all']:
             # Get funds where user is member
             user_funds = FundMember.objects.filter(user=user).values_list('fund', flat=True)
             shared_expenses = SharedExpense.objects.filter(fund__in=user_funds)
             if keyword:
-                shared_expenses = shared_expenses.filter(description__icontains=keyword)
+                escaped_keyword = re.escape(keyword)
+                shared_expenses = shared_expenses.filter(description__iregex=escaped_keyword)
             if date_from:
                 shared_expenses = shared_expenses.filter(date__gte=date_from)
             if date_to:
