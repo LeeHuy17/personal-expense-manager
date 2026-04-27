@@ -12,6 +12,36 @@
   }
 }
 
+/* ============================================
+   CRITICAL: View Toggle - Ensures display works
+   ============================================ */
+.hidden {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  overflow: hidden !important;
+}
+
+#landing-view {
+  display: flex;
+  z-index: 10;
+}
+
+#landing-view.hidden {
+  display: none !important;
+  z-index: 0;
+}
+
+#dashboard-view {
+  display: none;
+  z-index: 0;
+}
+
+#dashboard-view:not(.hidden) {
+  display: flex !important;
+  z-index: 10;
+}
+
 /* Dark mode utility */
 .dark {
   color-scheme: dark;

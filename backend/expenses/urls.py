@@ -1,13 +1,20 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import ChiPhiViewSet, ThuNhapViewSet, LoaiViewSet
+from .views import ChiPhiViewSet, ThuNhapViewSet, LoaiViewSet, UserProfileView
 
-# Sử dụng Router để tự động tạo 5 hành động CRUD (GET, POST, PUT, DELETE)
+# Sử dụng Router để tự động tạo các hành động CRUD
 router = DefaultRouter()
-router.register(r'expenses', ChiPhiViewSet, basename='chiphi') # Khớp với BM01
+
+# Đường dẫn cho Chi phí
+router.register(r'expenses', ChiPhiViewSet, basename='chiphi')
+
+# Đường dẫn cho Thu nhập - Đảm bảo ViewSet này đã dùng ThuNhapSerializer mới
 router.register(r'incomes', ThuNhapViewSet, basename='thunhap')
+
+# Đường dẫn cho Danh mục (Lương, Thưởng, Ăn uống...)
 router.register(r'categories', LoaiViewSet, basename='loai')
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('profile/', UserProfileView.as_view(), name='user-profile'),
 ]
