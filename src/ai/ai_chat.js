@@ -1,5 +1,26 @@
 const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
 
+function formatMarkdown(text) {
+  if (!text) return '';
+  
+  // Escape HTML characters first
+  let formatted = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  
+  // Convert **text** to <strong>
+  formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  
+  // Convert *text* to <em>
+  formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  
+  // Convert newlines to <br>
+  formatted = formatted.replace(/\n/g, '<br>');
+  
+  return formatted;
+}
+
 function ensureChatWidgetHtml() {
   if (document.getElementById('ai-chat-widget')) {
     return;
@@ -16,7 +37,7 @@ function ensureChatWidgetHtml() {
         </div>
         <div id="ai-chat-messages" class="ai-chat-messages"></div>
         <div class="ai-chat-controls">
-          <input id="ai-chat-input" type="text" placeholder="Hỏi AI về thu chi..." autocomplete="off" />
+          <input id="ai-chat-input" type="text" placeholder="Hỏi AI về bất cứ điều gì..." autocomplete="off" />
           <button id="ai-chat-send" class="ai-chat-send">Gửi</button>
         </div>
       </div>
@@ -50,7 +71,7 @@ function initAIChat() {
     container.className = `ai-message ${sender}`;
     const bubble = document.createElement('div');
     bubble.className = 'ai-message-bubble';
-    bubble.textContent = text;
+    bubble.innerHTML = formatMarkdown(text);
     container.appendChild(bubble);
     messagesBox.appendChild(container);
     scrollToBottom();
@@ -107,7 +128,7 @@ function initAIChat() {
         renderCards(responseBody.cards);
       })
       .catch((error) => {
-        renderMessage('Lỗi: ' + (error.message || 'Không thể kết nối AI.'), 'ai');
+        renderMessage('❌ Lỗi: ' + (error.message || 'Không thể kết nối AI.'), 'ai');
       })
       .finally(() => setLoading(false));
   };

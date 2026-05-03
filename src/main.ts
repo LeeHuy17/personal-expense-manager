@@ -11,6 +11,664 @@ import { handleLogin, handleForgotPassword, handleResetPasswordClick } from './a
 import { initResetPasswordPage, setupResetPasswordListeners } from './auth/reset-password';
 import { showForgotTab, showLoginTab, showResetTab } from './auth/ui-logic';
 
+// Pagination module
+import { createPaginationManager, createPaginationControls } from './features/pagination';
+
+const backendOrigin = (import.meta.env.VITE_BACKEND_URL as string) || (import.meta.env.VITE_API_BASE as string) || 'http://127.0.0.1:8000';
+const sharedFundApiBase = `${backendOrigin.replace(/\/$/, '')}/api/shared-fund/`;
+
+function updateSharedFundLinks() {
+    const links = document.querySelectorAll<HTMLAnchorElement>('a[data-shared-fund-link]');
+    links.forEach((link) => {
+        link.href = `${backendOrigin.replace(/\/$/, '')}/shared-fund/`;
+    });
+}
+
+function getSharedFundHeaders(isJson = true) {
+  const token = localStorage.getItem('accessToken') || '';
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+  };
+  if (isJson) headers['Content-Type'] = 'application/json';
+  if (token) {
+    headers['Authorization'] = token.startsWith('Token ') || token.startsWith('Bearer ') ? token : `Token ${token}`;
+  }
+  return headers;
+}
+
+function showSharedFundNotice(message: string, type: 'success' | 'error' | 'info' = 'success') {
+  const notice = document.getElementById('shared-fund-notice');
+  if (!notice) return;
+  notice.textContent = message;
+  notice.className = `mt-6 rounded-3xl p-4 text-sm ${type === 'success' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-200' : type === 'error' ? 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-200' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'}`;
+  notice.classList.remove('hidden');
+  window.setTimeout(() => notice.classList.add('hidden'), 4500);
+}
+
+let currentSharedFundId: number | null = null;
+let currentSharedFundMembers: any[] = [];
+
+// Notifications
+let currentInvitations: any[] = [];
+let invitationPollingInterval: any = null;
+let lastInvitationCount: number = 0;
+
+function roundToTwo(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+// Notifications functions
+async function loadInvitations() {
+  try {
+    const invitations = await fetchSharedFundData('invitations/', { method: 'GET' });
+    currentInvitations = invitations;
+    updateNotificationBadge();
+    
+    // If there's a new invitation and modal is open, update it
+    if (invitations.length > lastInvitationCount) {
+      const modal = document.getElementById('notifications-modal');
+      if (modal && !modal.classList.contains('hidden')) {
+        renderNotificationsModal();
+      }
+    }
+    lastInvitationCount = invitations.length;
+    
+    return invitations;
+  } catch (error) {
+    console.warn('Failed to load invitations:', error);
+    return [];
+  }
+}
+
+function startInvitationPolling() {
+  if (invitationPollingInterval) {
+    console.warn('Invitation polling already running');
+    return;
+  }
+  
+  console.log('Starting invitation polling (every 3 seconds)');
+  invitationPollingInterval = setInterval(async () => {
+    if (localStorage.getItem('isLoggedIn') === 'true') {
+      await loadInvitations();
+    }
+  }, 3000); // Poll every 3 seconds
+}
+
+function stopInvitationPolling() {
+  if (invitationPollingInterval) {
+    console.log('Stopping invitation polling');
+    clearInterval(invitationPollingInterval);
+    invitationPollingInterval = null;
+  }
+}
+
+function updateNotificationBadge() {
+  const badge = document.getElementById('notification-badge');
+  const count = currentInvitations.length;
+  if (badge) {
+    badge.textContent = count.toString();
+    badge.classList.toggle('hidden', count === 0);
+  }
+}
+
+function renderNotificationsModal() {
+  const list = document.getElementById('notifications-list');
+  const noNotifications = document.getElementById('no-notifications');
+  if (!list || !noNotifications) return;
+
+  if (currentInvitations.length === 0) {
+    list.innerHTML = '';
+    noNotifications.classList.remove('hidden');
+    return;
+  }
+
+  noNotifications.classList.add('hidden');
+  list.innerHTML = currentInvitations.map(invitation => `
+    <div class="rounded-2xl bg-slate-50 dark:bg-slate-800 p-4 border border-slate-100 dark:border-slate-700">
+      <div class="flex items-start justify-between gap-4">
+        <div class="flex-1">
+          <p class="text-sm font-bold text-slate-900 dark:text-white">
+            Lời mời tham gia quỹ: ${invitation.fund_name}
+          </p>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Từ: ${invitation.inviter_name} • ${new Date(invitation.created_at).toLocaleDateString('vi-VN')}
+          </p>
+        </div>
+        <div class="flex gap-2">
+          <button class="accept-invitation-btn px-3 py-1.5 rounded-xl bg-emerald-500 text-white text-xs font-bold hover:bg-emerald-600 transition-colors" data-invitation-id="${invitation.id}">
+            Chấp nhận
+          </button>
+          <button class="reject-invitation-btn px-3 py-1.5 rounded-xl bg-rose-500 text-white text-xs font-bold hover:bg-rose-600 transition-colors" data-invitation-id="${invitation.id}">
+            Từ chối
+          </button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  // Add event listeners
+  document.querySelectorAll('.accept-invitation-btn').forEach(btn => {
+    btn.addEventListener('click', handleAcceptInvitation);
+  });
+  document.querySelectorAll('.reject-invitation-btn').forEach(btn => {
+    btn.addEventListener('click', handleRejectInvitation);
+  });
+}
+
+async function handleAcceptInvitation(event: Event) {
+  const button = event.target as HTMLButtonElement;
+  const invitationId = button.getAttribute('data-invitation-id');
+  if (!invitationId) return;
+
+  try {
+    await fetchSharedFundData(`invitations/${invitationId}/accept/`, { method: 'POST' });
+    showSharedFundNotice('Đã chấp nhận lời mời tham gia quỹ.', 'success');
+    await loadInvitations();
+    renderNotificationsModal();
+    await loadSharedFunds();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Lỗi khi chấp nhận lời mời.';
+    showSharedFundNotice(message, 'error');
+  }
+}
+
+async function handleRejectInvitation(event: Event) {
+  const button = event.target as HTMLButtonElement;
+  const invitationId = button.getAttribute('data-invitation-id');
+  if (!invitationId) return;
+
+  try {
+    await fetchSharedFundData(`invitations/${invitationId}/reject/`, { method: 'POST' });
+    showSharedFundNotice('Đã từ chối lời mời tham gia quỹ.', 'success');
+    await loadInvitations();
+    renderNotificationsModal();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Lỗi khi từ chối lời mời.';
+    showSharedFundNotice(message, 'error');
+  }
+}
+
+function scrollToSharedFundSection() {
+  const section = document.getElementById('shared-fund-section');
+  section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function fetchSharedFundData(path: string, options: RequestInit = {}) {
+  const request = await fetch(`${sharedFundApiBase}${path}`, {
+    credentials: 'include',
+    headers: getSharedFundHeaders(Boolean(options.body === undefined ? true : options.body)),
+    ...options,
+  });
+
+  const contentType = request.headers.get('content-type') || '';
+  const payload = contentType.includes('application/json') ? await request.json() : await request.text();
+
+  if (!request.ok) {
+    const message = payload?.detail || payload?.message || request.statusText || 'Lỗi khi kết nối quỹ chung.';
+    throw new Error(message);
+  }
+  return payload;
+}
+
+function renderSharedFundSummary(funds: any[]) {
+  const countEl = document.getElementById('shared-fund-count');
+  const membersEl = document.getElementById('shared-fund-members');
+  const totalEl = document.getElementById('shared-fund-total');
+  if (countEl) countEl.textContent = `${funds.length}`;
+  if (membersEl) {
+    const memberCount = funds.reduce((total, fund) => total + (fund.member_count || 0), 0);
+    membersEl.textContent = `${memberCount}`;
+  }
+  if (totalEl) totalEl.textContent = `${funds.length > 0 ? 'Hoạt động' : 'Chưa có'}`;
+}
+
+function renderSharedFundList(funds: any[]) {
+  const list = document.getElementById('shared-fund-list');
+  if (!list) return;
+  if (!funds || funds.length === 0) {
+    list.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">Chưa có quỹ chung nào. Tạo quỹ mới để bắt đầu.</p>';
+    renderSharedFundSummary([]);
+    return;
+  }
+
+  list.innerHTML = funds.map((fund) => `
+    <div class="rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-4 shadow-sm">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h5 class="text-base font-bold text-slate-900 dark:text-white">${fund.name}</h5>
+          <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">${fund.description || 'Chưa có mô tả'}</p>
+        </div>
+        <span class="text-xs uppercase tracking-[0.2em] font-bold text-slate-400">${fund.member_count || 0} thành viên</span>
+      </div>
+      <div class="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-500 dark:text-slate-400">
+        <div>
+          <p class="font-semibold text-slate-900 dark:text-white">${fund.owner}</p>
+          <p>Chủ quỹ</p>
+        </div>
+        <div>
+          <p class="font-semibold text-slate-900 dark:text-white">${new Date(fund.updated_at).toLocaleDateString('vi-VN')}</p>
+          <p>Cập nhật</p>
+        </div>
+      </div>
+    </div>
+  `).join('');
+  renderSharedFundSummary(funds);
+}
+
+async function loadSharedFunds(): Promise<any[]> {
+  const list = document.getElementById('shared-fund-list');
+  if (list) {
+    list.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">Đang tải danh sách quỹ...</p>';
+  }
+
+  try {
+    const funds = await fetchSharedFundData('funds/', { method: 'GET' });
+    renderSharedFundList(funds);
+    setSharedFundSelectOptions(funds);
+    return funds;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Lỗi không xác định';
+    if (list) {
+      list.innerHTML = `<p class="text-sm text-rose-600 dark:text-rose-300">${message}</p>`;
+    }
+    showSharedFundNotice(message, 'error');
+    return [];
+  }
+}
+
+function setSharedFundSelectOptions(funds: any[]) {
+  const select = document.getElementById('shared-fund-select') as HTMLSelectElement | null;
+  if (!select) return;
+  select.innerHTML = '<option value="">-- Chọn quỹ --</option>' + funds.map(fund => `
+      <option value="${fund.id}">${fund.name}</option>
+    `).join('');
+}
+
+function renderSelectedFundSummary(fund: any) {
+  const nameEl = document.getElementById('selected-fund-name');
+  const ownerEl = document.getElementById('selected-fund-owner');
+  const membersEl = document.getElementById('selected-fund-members');
+  const updatedEl = document.getElementById('selected-fund-updated');
+  const expenseCountEl = document.getElementById('selected-fund-expense-count');
+  const balanceSummaryEl = document.getElementById('selected-fund-balance-summary');
+
+  if (nameEl) nameEl.textContent = fund.name || 'Chưa chọn';
+  if (ownerEl) ownerEl.textContent = fund.owner || '-';
+  if (membersEl) membersEl.textContent = `${fund.member_count || 0}`;
+  if (updatedEl) updatedEl.textContent = fund.updated_at ? new Date(fund.updated_at).toLocaleDateString('vi-VN') : '-';
+  if (expenseCountEl) expenseCountEl.textContent = `${fund.expense_count || 0}`;
+  if (balanceSummaryEl) balanceSummaryEl.textContent = fund.balance_summary || '0đ';
+}
+
+function setSharedFundMemberSelectors(members: any[]) {
+  currentSharedFundMembers = members;
+  const expenseSelect = document.getElementById('shared-fund-expense-members') as HTMLSelectElement | null;
+  const settlementSelect = document.getElementById('shared-fund-settlement-to') as HTMLSelectElement | null;
+
+  const options = members.map(member => `
+    <option value="${member.user_id}">${member.user} (${member.role})</option>
+  `).join('');
+
+  if (expenseSelect) {
+    expenseSelect.innerHTML = options;
+    renderExpenseSplitDetails();
+  }
+  if (settlementSelect) settlementSelect.innerHTML = options;
+}
+
+function renderExpenseSplitDetails() {
+  const splitTypeSelect = document.getElementById('shared-fund-expense-split-type') as HTMLSelectElement | null;
+  const membersSelect = document.getElementById('shared-fund-expense-members') as HTMLSelectElement | null;
+  const splitDetails = document.getElementById('shared-fund-split-details');
+  if (!splitTypeSelect || !membersSelect || !splitDetails) return;
+
+  const splitType = splitTypeSelect.value;
+  const selectedMembers = Array.from(membersSelect.selectedOptions).map(option => ({
+    user_id: Number(option.value),
+    label: option.text,
+  }));
+
+  if (splitType === 'equal') {
+    splitDetails.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">Hệ thống sẽ tự động chia đều chi phí cho các thành viên đã chọn.</p>';
+    return;
+  }
+
+  if (!selectedMembers.length) {
+    splitDetails.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">Chọn thành viên để nhập chi tiết chia.</p>';
+    return;
+  }
+
+  const label = splitType === 'percentage' ? 'Phần trăm (%)' : 'Số tiền (đ)';
+  const placeholder = splitType === 'percentage' ? '0.0' : '0';
+
+  splitDetails.innerHTML = `
+    <p class="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
+      ${splitType === 'percentage' ? 'Nhập tỷ lệ phần trăm cho mỗi thành viên:' : 'Nhập số tiền chia cho mỗi thành viên:'}
+    </p>
+    <div class="space-y-3">
+      ${selectedMembers.map(member => `
+        <div class="grid grid-cols-[1fr_120px] gap-3 items-center">
+          <div class="text-sm text-slate-900 dark:text-slate-100">${member.label}</div>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            data-split-user-id="${member.user_id}"
+            placeholder="${placeholder}"
+            class="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 py-2"
+          />
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderSharedFundExpenses(expenses: any[]) {
+  const container = document.getElementById('shared-fund-expenses-list');
+  if (!container) return;
+  if (!expenses.length) {
+    container.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">Chưa có chi tiêu nào.</p>';
+    return;
+  }
+  container.innerHTML = expenses.map(expense => `
+      <div class="rounded-3xl bg-slate-100 dark:bg-slate-950 p-4 border border-slate-200 dark:border-slate-800">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <p class="font-semibold text-slate-900 dark:text-white">${expense.description || 'Chi tiêu nhóm'}</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${new Date(expense.date).toLocaleDateString('vi-VN')} • ${expense.created_by || 'Người dùng'}</p>
+          </div>
+          <p class="font-bold text-slate-900 dark:text-white">${Number(expense.amount).toLocaleString('vi-VN')}đ</p>
+        </div>
+      </div>
+    `).join('');
+}
+
+function renderSharedFundSettlements(settlements: any[]) {
+  const container = document.getElementById('shared-fund-settlements-list');
+  if (!container) return;
+  if (!settlements.length) {
+    container.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">Chưa có thanh toán nào.</p>';
+    return;
+  }
+  container.innerHTML = settlements.map(item => `
+      <div class="rounded-3xl bg-slate-100 dark:bg-slate-950 p-4 border border-slate-200 dark:border-slate-800">
+        <p class="font-semibold text-slate-900 dark:text-white">${item.from_user || 'Bạn'} → ${item.to_user || 'Thành viên'}</p>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${new Date(item.created_at).toLocaleDateString('vi-VN')}</p>
+        <p class="mt-2 font-bold text-slate-900 dark:text-white">${Number(item.amount).toLocaleString('vi-VN')}đ</p>
+      </div>
+    `).join('');
+}
+
+function renderSharedFundBalances(balances: any[]) {
+  const container = document.getElementById('shared-fund-balances-list');
+  if (!container) return;
+  if (!balances.length) {
+    container.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">Chưa có dữ liệu công nợ.</p>';
+    return;
+  }
+  container.innerHTML = balances.map(item => `
+      <div class="rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-4 flex items-center justify-between gap-4">
+        <p class="font-semibold text-slate-900 dark:text-white">${item.username}</p>
+        <p class="font-bold ${item.balance < 0 ? 'text-rose-600' : 'text-emerald-600'}">${Number(item.balance).toLocaleString('vi-VN')}đ</p>
+      </div>
+    `).join('');
+}
+
+async function loadSelectedFundDetails(fundId: number) {
+  if (!fundId) return;
+  currentSharedFundId = fundId;
+  try {
+    const fund = await fetchSharedFundData(`funds/${fundId}/`, { method: 'GET' });
+    renderSelectedFundSummary({
+      ...fund,
+      expense_count: 0,
+      balance_summary: 'Đang tải...',
+    });
+    setSharedFundMemberSelectors(fund.members || []);
+    const [expenses, settlements, balances] = await Promise.all([
+      fetchSharedFundData(`expenses/?fund=${fundId}`, { method: 'GET' }).catch(() => []),
+      fetchSharedFundData(`settlements/?fund=${fundId}`, { method: 'GET' }).catch(() => []),
+      fetchSharedFundData(`funds/${fundId}/balances/`, { method: 'GET' }).catch(() => []),
+    ]);
+
+    renderSharedFundExpenses(expenses);
+    renderSharedFundSettlements(settlements);
+    renderSharedFundBalances(balances);
+    renderSelectedFundSummary({
+      ...fund,
+      expense_count: Array.isArray(expenses) ? expenses.length : 0,
+      balance_summary: balances.reduce((sum: number, item: any) => sum + Number(item.balance || 0), 0).toLocaleString('vi-VN') + 'đ',
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Không thể tải chi tiết quỹ.';
+    showSharedFundNotice(message, 'error');
+  }
+}
+
+async function submitSharedFundExpense(event: SubmitEvent) {
+  event.preventDefault();
+  if (!currentSharedFundId) {
+    showSharedFundNotice('Vui lòng chọn quỹ trước khi thêm chi tiêu.', 'error');
+    return;
+  }
+  const descInput = document.getElementById('shared-fund-expense-desc') as HTMLInputElement | null;
+  const amountInput = document.getElementById('shared-fund-expense-amount') as HTMLInputElement | null;
+  const dateInput = document.getElementById('shared-fund-expense-date') as HTMLInputElement | null;
+  const membersSelect = document.getElementById('shared-fund-expense-members') as HTMLSelectElement | null;
+  if (!descInput || !amountInput || !dateInput || !membersSelect) return;
+
+  const amount = Number(amountInput.value);
+  const description = descInput.value.trim();
+  const date = dateInput.value;
+  const splitTypeSelect = document.getElementById('shared-fund-expense-split-type') as HTMLSelectElement | null;
+  const splitType = splitTypeSelect?.value || 'equal';
+  const selected = Array.from(membersSelect.selectedOptions).map(option => Number(option.value));
+
+  if (!amount || amount <= 0) {
+    showSharedFundNotice('Số tiền phải lớn hơn 0.', 'error');
+    return;
+  }
+  if (!selected.length) {
+    showSharedFundNotice('Vui lòng chọn ít nhất một thành viên.', 'error');
+    return;
+  }
+
+  let splits: any[] = [];
+  if (splitType === 'equal') {
+    const roundedShare = Math.floor((amount / selected.length) * 100) / 100;
+    splits = selected.map((userId, index) => {
+      const remainder = index === selected.length - 1 ? roundToTwo(amount - roundedShare * (selected.length - 1)) : roundedShare;
+      return { user: userId, amount_owed: remainder };
+    });
+  } else {
+    const splitInputs = Array.from(document.querySelectorAll<HTMLInputElement>('#shared-fund-split-details input[data-split-user-id]'));
+    if (!splitInputs.length) {
+      showSharedFundNotice('Vui lòng nhập chi tiết chia cho từng thành viên.', 'error');
+      return;
+    }
+    splits = splitInputs.map(input => {
+      const userId = Number(input.dataset.splitUserId);
+      const value = Number(input.value);
+      if (!userId || value <= 0) {
+        throw new Error('Mỗi thành viên phải có giá trị chia hợp lệ.');
+      }
+      return splitType === 'percentage'
+        ? { user: userId, percentage: roundToTwo(value) }
+        : { user: userId, amount_owed: roundToTwo(value) };
+    });
+  }
+
+  const payload = {
+    fund: currentSharedFundId,
+    amount,
+    description,
+    date,
+    split_type: splitType,
+    splits,
+  };
+
+  console.log('Expense payload:', payload);
+
+  try {
+    await fetchSharedFundData('expenses/', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    showSharedFundNotice('Chi tiêu đã được ghi nhận.', 'success');
+    descInput.value = '';
+    amountInput.value = '';
+    dateInput.value = '';
+    membersSelect.selectedIndex = -1;
+    await loadSelectedFundDetails(currentSharedFundId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Lỗi ghi chi tiêu.';
+    showSharedFundNotice(message, 'error');
+  }
+}
+
+async function submitSharedFundSettlement(event: SubmitEvent) {
+  event.preventDefault();
+  if (!currentSharedFundId) {
+    showSharedFundNotice('Vui lòng chọn quỹ trước khi thanh toán.', 'error');
+    return;
+  }
+  const toSelect = document.getElementById('shared-fund-settlement-to') as HTMLSelectElement | null;
+  const amountInput = document.getElementById('shared-fund-settlement-amount') as HTMLInputElement | null;
+  if (!toSelect || !amountInput) return;
+
+  const toUser = Number(toSelect.value);
+  const amount = Number(amountInput.value);
+  if (!toUser) {
+    showSharedFundNotice('Vui lòng chọn người nhận thanh toán.', 'error');
+    return;
+  }
+  if (!amount || amount <= 0) {
+    showSharedFundNotice('Số tiền phải lớn hơn 0.', 'error');
+    return;
+  }
+
+  try {
+    await fetchSharedFundData('settlements/', {
+      method: 'POST',
+      body: JSON.stringify({ fund: currentSharedFundId, to_user: toUser, amount }),
+    });
+    showSharedFundNotice('Thanh toán đã được ghi nhận.', 'success');
+    amountInput.value = '';
+    await loadSelectedFundDetails(currentSharedFundId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Lỗi ghi thanh toán.';
+    showSharedFundNotice(message, 'error');
+  }
+}
+
+async function submitSharedFundInvite(event: SubmitEvent) {
+  event.preventDefault();
+  if (!currentSharedFundId) {
+    showSharedFundNotice('Vui lòng chọn quỹ trước khi mời thành viên.', 'error');
+    return;
+  }
+  const userIdInput = document.getElementById('shared-fund-invite-user-id') as HTMLInputElement | null;
+  const roleSelect = document.getElementById('shared-fund-invite-role') as HTMLSelectElement | null;
+  if (!userIdInput || !roleSelect) return;
+
+  const userId = Number(userIdInput.value);
+  const role = roleSelect.value;
+  if (!userId) {
+    showSharedFundNotice('Vui lòng nhập user ID.', 'error');
+    return;
+  }
+
+  try {
+    await fetchSharedFundData(`funds/${currentSharedFundId}/invite/`, {
+      method: 'POST',
+      body: JSON.stringify({ user: userId, role }),
+    });
+    showSharedFundNotice('Đã gửi lời mời thành viên.', 'success');
+    userIdInput.value = '';
+    await loadInvitations(); // Reload invitations to update badge
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Lỗi mời thành viên.';
+    showSharedFundNotice(message, 'error');
+  }
+}
+
+function toggleSharedFundExpanded() {
+  const panel = document.getElementById('shared-fund-expanded-panel');
+  if (!panel) return;
+  panel.classList.toggle('hidden');
+  const toggleBtn = document.getElementById('shared-fund-toggle-btn');
+  if (toggleBtn) {
+    toggleBtn.textContent = panel.classList.contains('hidden') ? 'Mở rộng chức năng' : 'Thu gọn chức năng';
+  }
+}
+
+function bindSharedFundEvents() {
+  document.getElementById('shared-fund-create-form')?.addEventListener('submit', createSharedFund);
+  document.getElementById('refresh-shared-fund-btn')?.addEventListener('click', () => loadSharedFunds().catch((error) => {
+    console.warn('⚠️ Failed to refresh shared fund', error);
+  }));
+  document.getElementById('shared-fund-toggle-btn')?.addEventListener('click', () => {
+    toggleSharedFundExpanded();
+    if (!document.getElementById('shared-fund-expanded-panel')?.classList.contains('hidden')) {
+      scrollToSharedFundSection();
+    }
+  });
+  document.getElementById('shared-fund-select')?.addEventListener('change', (event) => {
+    const value = (event.target as HTMLSelectElement).value;
+    const id = value ? Number(value) : null;
+    if (id) {
+      loadSelectedFundDetails(id);
+    }
+  });
+  document.getElementById('load-selected-fund-btn')?.addEventListener('click', () => {
+    const select = document.getElementById('shared-fund-select') as HTMLSelectElement | null;
+    const id = select?.value ? Number(select.value) : null;
+    if (id) loadSelectedFundDetails(id);
+  });
+  document.getElementById('shared-fund-expense-split-type')?.addEventListener('change', renderExpenseSplitDetails);
+  document.getElementById('shared-fund-expense-members')?.addEventListener('change', renderExpenseSplitDetails);
+  document.getElementById('shared-fund-expense-form')?.addEventListener('submit', submitSharedFundExpense);
+  document.getElementById('shared-fund-settlement-form')?.addEventListener('submit', submitSharedFundSettlement);
+  document.getElementById('shared-fund-invite-form')?.addEventListener('submit', submitSharedFundInvite);
+
+  // Notifications
+  document.getElementById('notifications-btn')?.addEventListener('click', () => {
+    renderNotificationsModal();
+    document.getElementById('notifications-modal')?.classList.remove('hidden');
+  });
+  document.getElementById('close-notifications-modal')?.addEventListener('click', () => {
+    document.getElementById('notifications-modal')?.classList.add('hidden');
+  });
+}
+
+async function createSharedFund(event: SubmitEvent) {
+  event.preventDefault();
+  const nameInput = document.getElementById('shared-fund-name') as HTMLInputElement | null;
+  const descriptionInput = document.getElementById('shared-fund-description') as HTMLTextAreaElement | null;
+  if (!nameInput || !descriptionInput) return;
+
+  const name = nameInput.value.trim();
+  const description = descriptionInput.value.trim();
+  if (!name) {
+    showSharedFundNotice('Vui lòng nhập tên quỹ.', 'error');
+    return;
+  }
+
+  try {
+    await fetchSharedFundData('funds/', {
+      method: 'POST',
+      body: JSON.stringify({ name, description }),
+    });
+    showSharedFundNotice('Tạo quỹ thành công.', 'success');
+    nameInput.value = '';
+    descriptionInput.value = '';
+    await loadSharedFunds();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Lỗi khi tạo quỹ.';
+    showSharedFundNotice(message, 'error');
+  }
+}
+
 // ============================================
 // GLOBAL AUTH UI INITIALIZATION
 // ============================================
@@ -280,11 +938,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // Update navbar buttons immediately
     console.log("🔘 Running updateNavbar() to set correct navbar state...");
     updateNavbar();
+    updateSharedFundLinks();
+    bindSharedFundEvents();
     if (localStorage.getItem('isLoggedIn') === 'true') {
         // Nếu có token, đồng bộ avatar từ API hoặc localStorage ngay khi tải trang
         loadProfileData().catch((error) => {
             console.warn('⚠️ Failed to refresh profile avatar on load:', error);
         });
+        loadSharedFunds().catch((error) => {
+            console.warn('⚠️ Failed to load shared fund data on load:', error);
+        });
+        loadInvitations().catch((error) => {
+            console.warn('⚠️ Failed to load invitations on load:', error);
+        });
+        // Start realtime polling for invitations
+        startInvitationPolling();
     }
     
     // Khởi tạo trang reset password nếu cần
@@ -568,7 +1236,7 @@ interface Transaction {
   description: string;
   amount: number;
   type: 'income' | 'expense';
-  category: string;
+  category_name: string;
   categoryId?: number | string;
   date: string;
   incomeId?: number;  // 🔑 Primary key for income records
@@ -621,6 +1289,8 @@ class ExpenseManager {
   private chartContainer: HTMLElement;
   private searchInput: HTMLInputElement;
   private filterCategory: HTMLSelectElement;
+  private recentSearchesContainer: HTMLElement;
+  private recentSearchesList: HTMLElement;
   private budgetProgress: HTMLElement;
   private budgetPercent: HTMLElement;
   private budgetWarning: HTMLElement;
@@ -633,8 +1303,16 @@ class ExpenseManager {
   private currentPage: number = 1;
   private itemsPerPage: number = 10;
   private sortBy: string = 'date-desc';
+  private searchTimeout?: ReturnType<typeof setTimeout>;
   private dateFrom: string = '';
   private dateTo: string = '';
+
+  // URL sync
+  private urlParams: URLSearchParams;
+
+  // Pagination module
+  private paginationManager: any;
+  private paginationControls: any;
 
   constructor() {
     this.landingView = document.getElementById('landing-view')!;
@@ -643,11 +1321,17 @@ class ExpenseManager {
     this.incomeEl = document.getElementById('total-income')!;
     this.expenseEl = document.getElementById('total-expense')!;
     this.listEl = document.getElementById('transaction-list')!;
+
+    // Initialize URL params
+    this.urlParams = new URLSearchParams(window.location.search);
+    this.loadFiltersFromURL();
     this.formEl = document.getElementById('transaction-form') as HTMLFormElement;
     this.chartContainer = document.getElementById('chart-container')!;
     this.trendChartContainer = document.getElementById('trend-chart-container')!;
     this.searchInput = document.getElementById('search-input') as HTMLInputElement;
     this.filterCategory = document.getElementById('filter-category') as HTMLSelectElement;
+    this.recentSearchesContainer = document.getElementById('recent-searches')!;
+    this.recentSearchesList = document.getElementById('recent-searches-list')!;
     this.budgetProgress = document.getElementById('budget-progress') || ({} as HTMLElement);
     this.budgetPercent = document.getElementById('budget-percent') || ({} as HTMLElement);
     this.budgetWarning = document.getElementById('budget-warning') || ({} as HTMLElement);
@@ -661,6 +1345,10 @@ class ExpenseManager {
     this.init();
     this.setupEventListeners();
     this.setupBudgetEvents();
+
+    // Initialize pagination manager
+    const token = localStorage.getItem('accessToken') || '';
+    this.paginationManager = createPaginationManager(token, 10);
     
     // Check login state
     this.isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
@@ -801,6 +1489,9 @@ class ExpenseManager {
    handleLogoutClick = () => {
       console.log('🔐 Logout button clicked');
       
+      // Stop invitation polling
+      stopInvitationPolling();
+      
       // 1. Clear all session data FIRST - before any reload
       localStorage.clear();
       sessionStorage.clear();
@@ -851,6 +1542,10 @@ class ExpenseManager {
       document.getElementById('features-section')?.scrollIntoView({ behavior: 'smooth' });
     });
 
+    document.getElementById('landing-shared-fund-btn')?.addEventListener('click', () => {
+      this.openAuthModal('login');
+    });
+
     document.getElementById('landing-add-transaction-btn')?.addEventListener('click', () => {
       const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
       if (isLoggedIn) {
@@ -894,45 +1589,62 @@ class ExpenseManager {
     });
 
     this.searchInput.addEventListener('input', () => {
-      this.currentPage = 1;
-      this.renderList();
-    });
-    this.filterCategory.addEventListener('change', () => {
-      this.currentPage = 1;
-      this.renderList();
+      clearTimeout(this.searchTimeout);
+      this.searchTimeout = setTimeout(async () => {
+        this.currentPage = 1;
+        await this.handleFilterChange();
+      }, 500); // 500ms debounce
     });
 
-    document.getElementById('filter-date-from')?.addEventListener('change', (e) => {
+    // Recent searches functionality
+    this.searchInput.addEventListener('focus', () => {
+      this.loadRecentSearches();
+    });
+
+    this.searchInput.addEventListener('blur', () => {
+      // Delay hiding to allow clicking on recent search items
+      setTimeout(() => {
+        this.hideRecentSearches();
+      }, 150);
+    });
+
+    // Hide recent searches when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!this.searchInput.contains(e.target as Node) && !this.recentSearchesContainer.contains(e.target as Node)) {
+        this.hideRecentSearches();
+      }
+    });
+    this.filterCategory.addEventListener('change', async () => {
+      this.currentPage = 1;
+      await this.handleFilterChange();
+    });
+
+    document.getElementById('filter-date-from')?.addEventListener('change', async (e) => {
       this.dateFrom = (e.target as HTMLInputElement).value;
       this.currentPage = 1;
-      this.renderList();
+      await this.handleFilterChange();
     });
 
-    document.getElementById('filter-date-to')?.addEventListener('change', (e) => {
+    document.getElementById('filter-date-to')?.addEventListener('change', async (e) => {
       this.dateTo = (e.target as HTMLInputElement).value;
       this.currentPage = 1;
-      this.renderList();
+      await this.handleFilterChange();
     });
 
-    document.getElementById('sort-by')?.addEventListener('change', (e) => {
+    document.getElementById('sort-by')?.addEventListener('change', async (e) => {
       this.sortBy = (e.target as HTMLSelectElement).value;
-      this.renderList();
+      this.currentPage = 1;
+      await this.handleFilterChange();
     });
 
-    document.getElementById('prev-page')?.addEventListener('click', () => {
-      if (this.currentPage > 1) {
-        this.currentPage--;
-        this.renderList();
-      }
+    document.getElementById('clear-all')?.addEventListener('click', async () => {
+      await this.clearFilters();
     });
 
-    document.getElementById('next-page')?.addEventListener('click', () => {
-      const totalPages = Math.ceil(this.getFilteredTransactions().length / this.itemsPerPage);
-      if (this.currentPage < totalPages) {
-        this.currentPage++;
-        this.renderList();
-      }
-    });
+    // Existing legacy controls are no longer used by the modular pagination component
+    document.getElementById('prev-page')?.classList.add('hidden');
+    document.getElementById('next-page')?.classList.add('hidden');
+    document.getElementById('page-numbers')?.classList.add('hidden');
 
     // Input formatting
     const amountInput = document.getElementById('amount') as HTMLInputElement;
@@ -951,6 +1663,16 @@ class ExpenseManager {
       const descInput = document.getElementById('desc') as HTMLInputElement;
       descInput.focus();
     });
+    const openSharedFundPanel = () => {
+      const panel = document.getElementById('shared-fund-expanded-panel');
+      if (panel?.classList.contains('hidden')) {
+        toggleSharedFundExpanded();
+      }
+      scrollToSharedFundSection();
+    };
+
+    document.getElementById('header-shared-fund-btn')?.addEventListener('click', openSharedFundPanel);
+    document.getElementById('dashboard-shared-fund-btn')?.addEventListener('click', openSharedFundPanel);
     document.getElementById('fab-add')?.addEventListener('click', () => {
       this.formEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       const descInput = document.getElementById('desc') as HTMLInputElement;
@@ -1324,6 +2046,19 @@ class ExpenseManager {
     localStorage.setItem('goals', JSON.stringify(this.goals));
   }
 
+  private addMockData(): void {
+    const mockData: Transaction[] = [
+      { id: '1', description: 'Lương tháng 3', amount: 25000000, type: 'income', category_name: 'Lương', date: '2026-03-01T08:00:00Z' },
+      { id: '2', description: 'Ăn tối Sushi', amount: 850000, type: 'expense', category_name: 'Ăn uống', date: '2026-03-05T19:30:00Z' },
+      { id: '3', description: 'Tiền nhà', amount: 5000000, type: 'expense', category_name: 'Nhà cửa', date: '2026-03-02T10:00:00Z' },
+      { id: '4', description: 'Mua sắm Shopee', amount: 1200000, type: 'expense', category_name: 'Mua sắm', date: '2026-03-10T14:20:00Z' },
+      { id: '5', description: 'Đổ xăng', amount: 500000, type: 'expense', category_name: 'Di chuyển', date: '2026-03-12T09:00:00Z' },
+      { id: '6', description: 'Thưởng dự án', amount: 3000000, type: 'income', category_name: 'Lương', date: '2026-03-15T16:00:00Z' },
+    ];
+    this.transactions = mockData;
+    this.saveData();
+  }
+
   private async addCategory() {
     const input = document.getElementById('new-category-input') as HTMLInputElement;
     const iconInput = document.getElementById('new-category-icon') as HTMLSelectElement;
@@ -1562,7 +2297,7 @@ class ExpenseManager {
     const filterSelect = document.getElementById('filter-category') as HTMLSelectElement;
     const budgetSelect = document.getElementById('budget-category') as HTMLSelectElement;
 
-    const options = this.categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+    const options = this.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
     if (filterSelect) filterSelect.innerHTML = `<option value="all">Tất cả danh mục</option>` + options;
     if (budgetSelect) budgetSelect.innerHTML = options;
     
@@ -1659,7 +2394,7 @@ class ExpenseManager {
       description: desc,
       amount,
       type,
-      category: categoryName,
+      category_name: categoryName,
       categoryId: selectedCategoryId,
       date: new Date().toISOString()
     };
@@ -1682,7 +2417,7 @@ class ExpenseManager {
       // Send to API with JWT token
       const response = await axios.post(endpoint, {
         amount: amount,
-        description: desc,
+        moTa: desc,  // ✅ FIXED: Use 'moTa' instead of 'description' to match serializer
         loai: selectedCategoryId,
         date: new Date().toISOString().split('T')[0] // Ngày hôm nay (YYYY-MM-DD)
       }, {
@@ -1807,7 +2542,7 @@ class ExpenseManager {
     if (!budget || budget <= 0) return;
 
     const totalExpense = this.transactions
-      .filter(t => t.type === 'expense' && t.category === category && new Date(t.date).getMonth() === new Date().getMonth())
+      .filter(t => t.type === 'expense' && t.category_name === category && new Date(t.date).getMonth() === new Date().getMonth())
       .reduce((acc, t) => acc + t.amount, 0);
 
     if (totalExpense > budget) {
@@ -1858,7 +2593,7 @@ class ExpenseManager {
   private populateBudgetCategorySelect() {
     const select = document.getElementById('budget-category') as HTMLSelectElement;
     if (select) {
-      select.innerHTML = this.categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+      select.innerHTML = this.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
     }
   }
 
@@ -1894,11 +2629,66 @@ class ExpenseManager {
 
   // 📥 Load data from API and re-render (called on initial load and after login)
   private async loadAndRender(skipAlerts: boolean = false): Promise<void> {
-    console.log('🔄 loadAndRender() called - fetching data from API...');
-    const fetchedTransactions = await this.fetchTransactions();
-    this.transactions = fetchedTransactions;
-    console.log('✅ Transactions updated:', this.transactions.length, 'items');
+    console.log('🔄 loadAndRender() called - using pagination manager...');
+    
+    // If logged in, use pagination API
+    if (this.isLoggedIn) {
+      const token = localStorage.getItem('accessToken') || '';
+      this.paginationManager.updateToken(token);
+      
+      try {
+        // Load first page with current filters
+        await this.paginationManager.loadPage({
+          page: 1,
+          page_size: this.itemsPerPage,
+          keyword: this.searchInput?.value.trim() || '',
+          category: this.filterCategory?.value && this.filterCategory.value !== 'all' ? this.filterCategory.value : undefined,
+          dateFrom: this.dateFrom || undefined,
+          dateTo: this.dateTo || undefined,
+        });
+
+        const paginatedData = this.paginationManager.getData();
+        this.transactions = paginatedData;
+        console.log('✅ Transactions loaded via pagination:', paginatedData.length, 'items');
+      } catch (error) {
+        console.error('❌ Pagination error:', error);
+        // Fallback: fetch all
+        const fetchedTransactions = await this.fetchTransactions();
+        this.transactions = fetchedTransactions;
+      }
+    } else {
+      // Fallback: fetch all from localStorage
+      const fetchedTransactions = await this.fetchTransactions();
+      this.transactions = fetchedTransactions;
+    }
+
     this.render(skipAlerts);
+    this.renderPaginationControls();
+  }
+
+  /**
+   * Render pagination controls
+   */
+  private renderPaginationControls(): void {
+    const paginationContainer = document.getElementById('pagination-controls');
+    if (!paginationContainer) {
+      console.warn('⚠️ Pagination container not found');
+      return;
+    }
+
+    const state = this.paginationManager?.getState();
+    if (!state) return;
+
+    // Setup controls with handlers
+    this.paginationControls = createPaginationControls(
+      'pagination-controls',
+      state,
+      {
+        onPrevious: () => this.handlePrevPage(),
+        onNext: () => this.handleNextPage(),
+        onPageClick: (page: number) => this.handlePageClick(page),
+      }
+    );
   }
 
   private render(skipAlerts: boolean = false) {
@@ -1923,7 +2713,7 @@ class ExpenseManager {
       const spent = this.transactions
         .filter(t => {
           const d = new Date(t.date);
-          return t.type === 'expense' && t.category === category && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+          return t.type === 'expense' && t.category_name === category && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
         })
         .reduce((sum, t) => sum + t.amount, 0);
 
@@ -1954,7 +2744,7 @@ class ExpenseManager {
       const spent = this.transactions
         .filter(t => {
           const d = new Date(t.date);
-          return t.type === 'expense' && t.category === category && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+          return t.type === 'expense' && t.category_name === category && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
         })
         .reduce((sum, t) => sum + t.amount, 0);
       
@@ -2168,7 +2958,7 @@ class ExpenseManager {
         description: `Tiết kiệm cho: ${this.goals[goalIndex].name}`,
         amount,
         type: 'expense',
-        category: 'Khác',
+        category_name: 'Khác',
         date: new Date().toISOString()
       };
       this.transactions.unshift(transaction);
@@ -2191,8 +2981,8 @@ class ExpenseManager {
     const catFilter = this.filterCategory.value;
 
     let filtered = this.transactions.filter(t => {
-      const matchesSearch = t.description.toLowerCase().includes(searchTerm) || t.category.toLowerCase().includes(searchTerm);
-      const matchesCat = catFilter === 'all' || t.category === catFilter;
+      const matchesSearch = t.description.toLowerCase().includes(searchTerm) || t.category_name.toLowerCase().includes(searchTerm);
+      const matchesCat = catFilter === 'all' || t.category_name === catFilter;
       
       let matchesDate = true;
       if (this.dateFrom) {
@@ -2214,7 +3004,7 @@ class ExpenseManager {
         case 'date-asc': return new Date(a.date).getTime() - new Date(b.date).getTime();
         case 'amount-desc': return b.amount - a.amount;
         case 'amount-asc': return a.amount - b.amount;
-        case 'category': return a.category.localeCompare(b.category);
+        case 'category': return a.category_name.localeCompare(b.category_name);
         default: return 0;
       }
     });
@@ -2223,26 +3013,417 @@ class ExpenseManager {
   }
 
   private renderList() {
+    if (this.isLoggedIn) {
+      this.renderPaginatedList();
+    } else {
+      this.renderLocalList();
+    }
+  }
+
+  private renderPaginatedList(): void {
+    if (this.transactions.length === 0) {
+      this.listEl.innerHTML = `
+        <div class="py-20 text-center text-slate-300 animate-in fade-in duration-700">
+          <div class="w-20 h-20 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+            <i data-lucide="search-x" class="w-10 h-10 opacity-20"></i>
+          </div>
+          <p class="font-medium text-slate-400">Không tìm thấy giao dịch nào...</p>
+        </div>
+      `;
+      createIcons({ icons });
+      return;
+    }
+
+    this.listEl.innerHTML = this.transactions.map((t) => {
+      const categoryObj = this.categories.find(c => c.name === t.category_name || c.id === t.category_name) || { icon: 'tag', color: '#64748b' };
+      const displayId = t.id;
+
+      return `
+      <div data-id="${displayId}" class="p-6 flex items-center justify-between hover:bg-orange-50/30 dark:hover:bg-slate-800 transition-all group animate-in slide-in-from-bottom-4 fade-in duration-500">
+        <div class="flex items-center gap-5">
+          <div class="w-12 h-12 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110" style="background-color: ${categoryObj.color}15; color: ${categoryObj.color}">
+            <i data-lucide="${categoryObj.icon}" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <p class="font-bold text-slate-900 dark:text-white group-hover:text-orange-600 transition-colors">${t.description}</p>
+            <div class="flex items-center gap-2 mt-1">
+              <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md" style="background-color: ${categoryObj.color}15; color: ${categoryObj.color}">${t.category_name || 'N/A'}</span>
+              <span class="text-[10px] font-medium text-slate-400">${new Date(t.date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-6">
+          <p class="font-black text-lg balance-value ${t.type === 'income' ? 'text-green-600' : t.type === 'expense' ? 'text-rose-600' : 'text-blue-600'}">
+            ${t.type === 'income' ? '+' : t.type === 'expense' ? '-' : ''}${this.formatCurrency(t.amount)}
+          </p>
+          <button onclick="window.expenseManager.deleteTransaction('${displayId}', '${t.type}')" class="p-2.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all rounded-xl opacity-0 group-hover:opacity-100" title="Xóa giao dịch này">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+    `;
+    }).join('');
+
+    if (this.isIncognito) {
+      document.querySelectorAll('.balance-value').forEach(el => el.classList.add('incognito-blur'));
+    }
+    createIcons({ icons });
+  }
+
+  private async loadPaginatedTransactions(page: number = 1): Promise<void> {
+    try {
+      const token = localStorage.getItem('accessToken') || '';
+      this.paginationManager.updateToken(token);
+
+      await this.paginationManager.loadPage({
+        page,
+        page_size: this.itemsPerPage,
+        keyword: this.searchInput.value.trim(),
+        category: this.filterCategory.value && this.filterCategory.value !== 'all' ? this.filterCategory.value : undefined,
+        dateFrom: this.dateFrom || undefined,
+        dateTo: this.dateTo || undefined,
+        sort: this.sortBy,
+      });
+
+      this.transactions = this.paginationManager.getData();
+      this.render(true);
+      this.renderPaginationControls();
+    } catch (error) {
+      console.error('Failed to load paginated transactions:', error);
+      const fetchedTransactions = await this.fetchTransactions();
+      this.transactions = fetchedTransactions;
+      this.render(true);
+    }
+  }
+
+  private async handleFilterChange(): Promise<void> {
+    if (this.isLoggedIn) {
+      await this.loadPaginatedTransactions(1);
+    } else {
+      this.render();
+    }
+    this.syncFiltersToURL();
+  }
+
+  /**
+   * Sync current filter values to URL
+   */
+  private syncFiltersToURL(): void {
+    const params = new URLSearchParams();
+
+    // Add search keyword
+    const keyword = this.searchInput?.value.trim();
+    if (keyword) {
+      params.set('keyword', keyword);
+    }
+
+    // Add category filter
+    const category = this.filterCategory?.value;
+    if (category && category !== 'all') {
+      params.set('category', category);
+    }
+
+    // Add date filters
+    if (this.dateFrom) {
+      params.set('dateFrom', this.dateFrom);
+    }
+    if (this.dateTo) {
+      params.set('dateTo', this.dateTo);
+    }
+
+    // Add sort
+    if (this.sortBy && this.sortBy !== 'date-desc') {
+      params.set('sort', this.sortBy);
+    }
+
+    // Add page (only if not page 1)
+    if (this.currentPage > 1) {
+      params.set('page', this.currentPage.toString());
+    }
+
+    // Update URL without reloading page
+    const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname;
+    window.history.replaceState({}, '', newUrl);
+  }
+
+  /**
+   * Load filter values from URL parameters
+   */
+  private loadFiltersFromURL(): void {
+    const params = new URLSearchParams(window.location.search);
+
+    // Load search keyword
+    const keyword = params.get('keyword');
+    if (keyword && this.searchInput) {
+      this.searchInput.value = keyword;
+    }
+
+    // Load category filter
+    const category = params.get('category');
+    if (category && this.filterCategory) {
+      this.filterCategory.value = category;
+    }
+
+    // Load date filters
+    const dateFrom = params.get('dateFrom');
+    if (dateFrom) {
+      this.dateFrom = dateFrom;
+      const dateFromEl = document.getElementById('filter-date-from') as HTMLInputElement;
+      if (dateFromEl) dateFromEl.value = dateFrom;
+    }
+
+    const dateTo = params.get('dateTo');
+    if (dateTo) {
+      this.dateTo = dateTo;
+      const dateToEl = document.getElementById('filter-date-to') as HTMLInputElement;
+      if (dateToEl) dateToEl.value = dateTo;
+    }
+
+    // Load sort
+    const sort = params.get('sort');
+    if (sort) {
+      this.sortBy = sort;
+      const sortEl = document.getElementById('sort-by') as HTMLSelectElement;
+      if (sortEl) sortEl.value = sort;
+    }
+
+    // Load page
+    const page = params.get('page');
+    if (page) {
+      this.currentPage = parseInt(page, 10) || 1;
+    }
+  }
+
+  /**
+   * Clear all filters and reset to default state
+   */
+  private async clearFilters(): Promise<void> {
+    // Reset search input
+    if (this.searchInput) {
+      this.searchInput.value = '';
+    }
+
+    // Reset category filter
+    if (this.filterCategory) {
+      this.filterCategory.value = 'all';
+    }
+
+    // Reset date filters
+    this.dateFrom = '';
+    this.dateTo = '';
+    const dateFromEl = document.getElementById('filter-date-from') as HTMLInputElement;
+    const dateToEl = document.getElementById('filter-date-to') as HTMLInputElement;
+    if (dateFromEl) dateFromEl.value = '';
+    if (dateToEl) dateToEl.value = '';
+
+    // Reset sort
+    this.sortBy = 'date-desc';
+    const sortEl = document.getElementById('sort-by') as HTMLSelectElement;
+    if (sortEl) sortEl.value = 'date-desc';
+
+    // Reset page
+    this.currentPage = 1;
+
+    // Update URL
+    window.history.replaceState({}, '', window.location.pathname);
+
+    // Re-render
+    if (this.isLoggedIn) {
+      await this.loadPaginatedTransactions(1);
+    } else {
+      this.render();
+    }
+  }
+
+  private async handlePageClick(page: number): Promise<void> {
+    if (!this.isLoggedIn) {
+      this.currentPage = page;
+      this.render();
+      return;
+    }
+
+    await this.loadPaginatedTransactions(page);
+  }
+
+  private async handleNextPage(): Promise<void> {
+    if (!this.isLoggedIn) {
+      const totalPages = Math.ceil(this.getFilteredTransactions().length / this.itemsPerPage);
+      if (this.currentPage < totalPages) {
+        this.currentPage += 1;
+        this.render();
+      }
+      return;
+    }
+
+    const nextPage = this.paginationManager?.getState().currentPage + 1;
+    await this.loadPaginatedTransactions(nextPage);
+  }
+
+  private async handlePrevPage(): Promise<void> {
+    if (!this.isLoggedIn) {
+      if (this.currentPage > 1) {
+        this.currentPage -= 1;
+        this.render();
+      }
+      return;
+    }
+
+    const prevPage = this.paginationManager?.getState().currentPage - 1;
+    await this.loadPaginatedTransactions(prevPage);
+  }
+
+  private async searchWithAPI(): Promise<void> {
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      this.showToast('Vui lòng đăng nhập để sử dụng tìm kiếm nâng cao', 'error');
+      return;
+    }
+
+    const searchTerm = this.searchInput.value.trim();
+    const catFilter = this.filterCategory.value;
+    const dateFrom = this.dateFrom || '';
+    const dateTo = this.dateTo || '';
+
+    const params = new URLSearchParams({
+      keyword: searchTerm,
+      sort: this.sortBy,
+      page: this.currentPage.toString(),
+    });
+
+    if (catFilter !== 'all') params.append('category', catFilter);
+    if (dateFrom) params.append('dateFrom', dateFrom);
+    if (dateTo) params.append('dateTo', dateTo);
+
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/api/search/transactions/?${params}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Token ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        this.renderAPISearchResults(data);
+      } else {
+        // Fallback to local search if API fails
+        console.warn('API search failed, falling back to local search');
+        this.renderLocalList();
+      }
+    } catch (error) {
+      console.error('Error searching with API:', error);
+      this.renderLocalList();
+    }
+  }
+
+  private renderAPISearchResults(data: any): void {
+    const results = data.results || [];
+    const totalItems = data.count || results.length;
+    const totalPages = Math.ceil(totalItems / this.itemsPerPage);
+
+    // Update pagination info
+    const infoEl = document.getElementById('pagination-info')!;
+    if (totalItems > 0) {
+      const start = (this.currentPage - 1) * this.itemsPerPage + 1;
+      const end = Math.min(this.currentPage * this.itemsPerPage, totalItems);
+      infoEl.textContent = `Hiển thị ${start} - ${end} của ${totalItems} giao dịch`;
+    } else {
+      infoEl.textContent = 'Hiển thị 0 - 0 của 0 giao dịch';
+    }
+
+    // Render results
+    const listEl = this.listEl;
+    listEl.innerHTML = '';
+
+    if (results.length === 0) {
+      listEl.innerHTML = `
+        <div class="text-center py-12">
+          <i data-lucide="search-x" class="w-16 h-16 mx-auto text-slate-300 mb-4"></i>
+          <p class="text-slate-500">Không tìm thấy giao dịch nào</p>
+        </div>
+      `;
+    } else {
+      results.forEach((transaction: any) => {
+        const item = this.createTransactionItem(transaction);
+        listEl.appendChild(item);
+      });
+    }
+
+    // Update pagination
+    this.updatePagination(totalPages);
+
+    // Re-initialize icons
+    if (window.lucide) {
+      window.lucide.createIcons();
+    }
+  }
+
+  private createTransactionItem(transaction: any): HTMLElement {
+    const item = document.createElement('div');
+    
+    // Check if this is API response format or local format
+    const isAPIFormat = transaction.hasOwnProperty('highlighted_description');
+    
+    let description = transaction.description;
+    let category = transaction.category || transaction.category_name;
+    let type = transaction.type;
+    let amount = transaction.amount;
+    let date = transaction.date;
+    let primaryId = transaction.id;
+    
+    // For API format, use highlighted description
+    if (isAPIFormat) {
+      description = transaction.highlighted_description || transaction.description;
+    }
+    
+    // Find category object for icon and color
+    const categoryObj = this.categories.find(c => c.name === category) || { icon: 'tag', color: '#64748b' };
+    
+    // Create HTML
+    item.className = 'p-6 flex items-center justify-between hover:bg-orange-50/30 dark:hover:bg-slate-800 transition-all group animate-in slide-in-from-bottom-4 fade-in duration-500';
+    item.innerHTML = `
+      <div class="flex items-center gap-5">
+        <div class="w-12 h-12 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110" style="background-color: ${categoryObj.color}15; color: ${categoryObj.color}">
+          <i data-lucide="${categoryObj.icon}" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <p class="font-bold text-slate-900 dark:text-white group-hover:text-orange-600 transition-colors">${description}</p>
+          <div class="flex items-center gap-2 mt-1">
+            <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md" style="background-color: ${categoryObj.color}15; color: ${categoryObj.color}">${category || 'N/A'}</span>
+            <span class="text-[10px] font-medium text-slate-400">${new Date(date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+            ${isAPIFormat ? `<span class="text-[10px] font-medium text-slate-400">${transaction.fund_name ? `(${transaction.fund_name})` : ''}</span>` : ''}
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center gap-6">
+        <p class="font-black text-lg balance-value ${type === 'income' ? 'text-green-600' : type === 'expense' ? 'text-rose-600' : 'text-blue-600'}">
+          ${type === 'income' ? '+' : type === 'expense' ? '-' : ''}${this.formatCurrency(amount)}
+        </p>
+        ${!isAPIFormat ? `<button onclick="window.expenseManager.deleteTransaction('${primaryId}', '${type}')" class="p-2.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all rounded-xl opacity-0 group-hover:opacity-100" title="Xóa giao dịch này">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+        </button>` : ''}
+      </div>
+    `;
+    
+    return item;
+  }
+
+  private renderLocalList(): void {
     const filtered = this.getFilteredTransactions();
     const totalItems = filtered.length;
     const totalPages = Math.ceil(totalItems / this.itemsPerPage);
-    
-    if (this.currentPage > totalPages && totalPages > 0) this.currentPage = totalPages;
-    if (totalPages === 0) this.currentPage = 1;
-
     const start = (this.currentPage - 1) * this.itemsPerPage;
-    const end = start + this.itemsPerPage;
-    const paginated = filtered.slice(start, end);
+    const paginated = filtered.slice(start, start + this.itemsPerPage);
 
-    // Update Pagination Info
     const infoEl = document.getElementById('pagination-info')!;
     if (totalItems > 0) {
-      infoEl.textContent = `Hiển thị ${start + 1} - ${Math.min(end, totalItems)} của ${totalItems} giao dịch`;
+      const end = Math.min(this.currentPage * this.itemsPerPage, totalItems);
+      infoEl.textContent = `Hiển thị ${start + 1} - ${end} của ${totalItems} giao dịch`;
     } else {
-      infoEl.textContent = `Không có giao dịch nào`;
+      infoEl.textContent = 'Hiển thị 0 - 0 của 0 giao dịch';
     }
 
-    // Update Page Numbers
     const pageNumbersEl = document.getElementById('page-numbers')!;
     pageNumbersEl.innerHTML = '';
     for (let i = 1; i <= totalPages; i++) {
@@ -2263,7 +3444,6 @@ class ExpenseManager {
       }
     }
 
-    // Update Prev/Next buttons
     (document.getElementById('prev-page') as HTMLButtonElement).disabled = this.currentPage === 1;
     (document.getElementById('next-page') as HTMLButtonElement).disabled = this.currentPage === totalPages || totalPages === 0;
 
@@ -2281,13 +3461,12 @@ class ExpenseManager {
     }
 
     this.listEl.innerHTML = paginated.map((t, index) => {
-      const categoryObj = this.categories.find(c => c.name === t.category) || { icon: 'tag', color: '#64748b' };
-      // 🔑 Lấy đúng ID khóa chính (incomeId hoặc chiPhiId)
+      const categoryObj = this.categories.find(c => c.name === t.category_name) || { icon: 'tag', color: '#64748b' };
       const primaryId = t.type === 'income' ? t.incomeId : t.chiPhiId;
-      const displayId = primaryId || t.id; // Backup to t.id if primary key not found
-      
+      const displayId = primaryId || t.id;
+
       console.log(`🔍 [RENDER] Transaction - Type: ${t.type}, Primary ID: ${primaryId}, Display ID: ${displayId}`);
-      
+
       return `
       <div data-id="${displayId}" class="p-6 flex items-center justify-between hover:bg-orange-50/30 dark:hover:bg-slate-800 transition-all group animate-in slide-in-from-bottom-4 fade-in duration-500" style="animation-delay: ${index * 30}ms">
         <div class="flex items-center gap-5">
@@ -2297,7 +3476,7 @@ class ExpenseManager {
           <div>
             <p class="font-bold text-slate-900 dark:text-white group-hover:text-orange-600 transition-colors">${t.description}</p>
             <div class="flex items-center gap-2 mt-1">
-              <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md" style="background-color: ${categoryObj.color}15; color: ${categoryObj.color}">${t.category}</span>
+              <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md" style="background-color: ${categoryObj.color}15; color: ${categoryObj.color}">${t.category_name}</span>
               <span class="text-[10px] font-medium text-slate-400">${new Date(t.date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
             </div>
           </div>
@@ -2311,12 +3490,38 @@ class ExpenseManager {
           </button>
         </div>
       </div>
-    `}).join('');
-    
+    `;
+    }).join('');
+
     if (this.isIncognito) {
       document.querySelectorAll('.balance-value').forEach(el => el.classList.add('incognito-blur'));
     }
     createIcons({ icons });
+  }
+
+  private updatePagination(totalPages: number): void {
+    const pageNumbersEl = document.getElementById('page-numbers')!;
+    pageNumbersEl.innerHTML = '';
+    for (let i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= this.currentPage - 1 && i <= this.currentPage + 1)) {
+        const btn = document.createElement('button');
+        btn.className = `w-8 h-8 rounded-lg text-xs font-bold transition-all ${i === this.currentPage ? 'bg-orange-600 text-white shadow-lg shadow-orange-200' : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-400'}`;
+        btn.textContent = i.toString();
+        btn.onclick = () => {
+          this.currentPage = i;
+          this.renderList();
+        };
+        pageNumbersEl.appendChild(btn);
+      } else if (i === this.currentPage - 2 || i === this.currentPage + 2) {
+        const span = document.createElement('span');
+        span.className = 'text-slate-300 px-1';
+        span.textContent = '...';
+        pageNumbersEl.appendChild(span);
+      }
+    }
+
+    (document.getElementById('prev-page') as HTMLButtonElement).disabled = this.currentPage === 1;
+    (document.getElementById('next-page') as HTMLButtonElement).disabled = this.currentPage === totalPages || totalPages === 0;
   }
 
   private renderChart() {
@@ -2337,7 +3542,7 @@ class ExpenseManager {
     const categoryData = d3.rollups(
       expenses,
       v => d3.sum(v, d => d.amount),
-      d => d.category
+      d => d.category_name
     ).map(([name, value]) => ({ name, value }));
 
     const width = 280;
@@ -2652,23 +3857,70 @@ class ExpenseManager {
     }
   }
 
-  private addMockData() {
-    const mockData: Transaction[] = [
-      { id: '1', description: 'Lương tháng 3', amount: 25000000, type: 'income', category: 'Lương', date: '2026-03-01T08:00:00Z' },
-      { id: '2', description: 'Ăn tối Sushi', amount: 850000, type: 'expense', category: 'Ăn uống', date: '2026-03-05T19:30:00Z' },
-      { id: '3', description: 'Tiền nhà', amount: 5000000, type: 'expense', category: 'Nhà cửa', date: '2026-03-02T10:00:00Z' },
-      { id: '4', description: 'Mua sắm Shopee', amount: 1200000, type: 'expense', category: 'Mua sắm', date: '2026-03-10T14:20:00Z' },
-      { id: '5', description: 'Đổ xăng', amount: 500000, type: 'expense', category: 'Di chuyển', date: '2026-03-12T09:00:00Z' },
-      { id: '6', description: 'Thưởng dự án', amount: 3000000, type: 'income', category: 'Lương', date: '2026-03-15T16:00:00Z' },
-    ];
-    this.transactions = mockData;
-    this.saveData();
+  private async loadRecentSearches() {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        console.log('No token available for recent searches');
+        return;
+      }
+
+      const response = await fetch('http://127.0.0.1:8000/api/search/recent-searches/', {
+        headers: {
+          'Authorization': `Token ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        this.displayRecentSearches(data);
+      } else {
+        console.log('Failed to load recent searches:', response.status);
+      }
+    } catch (error) {
+      console.error('Error loading recent searches:', error);
+    }
+  }
+
+  private displayRecentSearches(searches: any[]) {
+    if (!searches || searches.length === 0) {
+      this.hideRecentSearches();
+      return;
+    }
+
+    this.recentSearchesList.innerHTML = searches.map(search => `
+      <div class="px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer transition-colors"
+           onclick="window.expenseManager.selectRecentSearch('${search.keyword}')">
+        <div class="flex items-center gap-2">
+          <i data-lucide="clock" class="w-4 h-4 text-slate-400"></i>
+          <span class="text-sm text-slate-700 dark:text-slate-300">${search.keyword}</span>
+        </div>
+      </div>
+    `).join('');
+
+    this.recentSearchesContainer.classList.remove('hidden');
+    createIcons({ icons });
+  }
+
+  private hideRecentSearches() {
+    this.recentSearchesContainer.classList.add('hidden');
+  }
+
+  public selectRecentSearch(keyword: string) {
+    this.searchInput.value = keyword;
+    this.hideRecentSearches();
+    this.currentPage = 1;
+    this.renderList();
   }
 }
 
 declare global {
   interface Window {
     expenseManager: ExpenseManager;
+    lucide?: {
+      createIcons: () => void;
+    };
   }
 }
 

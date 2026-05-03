@@ -35,7 +35,17 @@ print("DEFAULT_FROM_EMAIL =", DEFAULT_FROM_EMAIL)
 SECRET_KEY = 'django-insecure-dev-key'
 DEBUG = True  # Enable debug again
 GEMINI_API_KEY = env('GEMINI_API_KEY', default='')
-GEMINI_MODEL = env('GEMINI_MODEL', default='gemini-1.5-flash')
+GEMINI_MODEL = env('GEMINI_MODEL', default='gemini-2.5-flash')
+GEMINI_MODEL_FALLBACKS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-pro-latest']
+
+# Groq AI Configuration (Alternative to Gemini)
+GROQ_API_KEY = env('GROQ_API_KEY', default='')
+GROQ_MODEL = env('GROQ_MODEL', default='llama-3.1-70b-versatile')
+GROQ_MODEL_FALLBACKS = ['llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768']
+
+# AI Provider Selection (default to groq due to quota issues)
+AI_PROVIDER = env('AI_PROVIDER', default='groq')  # 'gemini' or 'groq'
+
 ALLOWED_HOSTS = ['*']
 
 # 3. Định nghĩa các App
@@ -51,6 +61,8 @@ INSTALLED_APPS = [
     'expenses',
     'ai',
     'advisor',
+    'shared_fund',
+    'search_filter',
     
     # Thêm DRF để làm API 
     'rest_framework',
@@ -95,15 +107,11 @@ TEMPLATES = [
     },
 ]
 
-# 7. Cấu hình Cơ sở dữ liệu MySQL (Theo Schema )
+# 7. Cấu hình Cơ sở dữ liệu SQLite (Tạm thời để test)
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'personal_expense_manager',
-        'USER': 'root',
-        'PASSWORD': 'lehuy173', 
-        'HOST': 'localhost',
-        'PORT': '3306',
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
