@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'advisor',
     'shared_fund',
     'search_filter',
+    'savings',
     
     # Thêm DRF để làm API 
     'rest_framework',
@@ -100,8 +101,12 @@ TEMPLATES = [
 # 7. Cấu hình Cơ sở dữ liệu SQLite (Tạm thời để test)
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'personal_expense_manager', # Tên DB bạn tạo trong Workbench
+        'USER': 'root',
+        'PASSWORD': 'lehuy173',
+        'HOST': '127.0.0.1',
+        'PORT': '3306',
     }
 }
 
