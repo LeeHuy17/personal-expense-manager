@@ -23,7 +23,7 @@ class SharedFundViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return SharedFund.objects.filter(members__user=self.request.user).distinct()
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer):   
         fund = serializer.save(owner=self.request.user)
         FundMember.objects.create(fund=fund, user=self.request.user, role=FundMember.ROLE_OWNER)
 
@@ -33,8 +33,14 @@ class SharedFundViewSet(viewsets.ModelViewSet):
         if fund.owner != request.user:
             raise PermissionDenied('Chỉ owner mới được mời thành viên.')
 
+        # --- BẮT ĐẦU DEBUG ---
+        print("📥 Dữ liệu gửi từ Frontend:", request.data)
+        
         serializer = InviteMemberSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        
+        if not serializer.is_valid():
+            print("❌ LỖI VALIDATION CHI TIẾT:", serializer.errors)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         target_user = serializer.validated_data['user']
         role = serializer.validated_data['role']
 

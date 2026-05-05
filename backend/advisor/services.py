@@ -1,13 +1,15 @@
 import os
 import json
 import http.client
-from datetime import datetime, timedelta
+# import google.generativeai as genai
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
 from expenses.models import ChiPhi, ThuNhap
+from datetime import timedelta
 from .models import ChatSession, ChatMessage, SpendingHabit
 
+# Cấu hình API Key từ settings hoặc biến môi trường
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY') or getattr(settings, 'GEMINI_API_KEY', '')
 GEMINI_MODEL = getattr(settings, 'GEMINI_MODEL', 'gemini-1.5-flash')
 
@@ -139,7 +141,6 @@ def _create_session(user):
 def _append_message(session, role, content):
     return ChatMessage.objects.create(session=session, role=role, content=content)
 
-
 def _load_recent_messages(user, limit=8):
     session = _create_session(user)
     return session.messages.order_by('-created_at')[:limit][::-1]
@@ -149,13 +150,9 @@ def _build_system_prompt(user):
     habit_summary = _build_habit_summary(user)
     daily_hint = get_daily_suggestion(user)['summary']
     return (
-        'Bạn là một trợ lý tài chính tiếng Việt chuyên tư vấn thu chi cá nhân. '
-        'Hãy trả lời ngắn gọn, dễ hiểu và cung cấp hành động cụ thể. '
-        'Dựa trên lịch sử chi tiêu, thói quen và gợi ý hàng ngày của người dùng. '
-        f'Người dùng có thói quen sau: {habit_summary} '
-        f'Gợi ý hiện tại: {daily_hint} '
-        'Không đưa ra khuyến nghị đầu tư mạo hiểm. '
-        'Khuyến khích tiết kiệm và phân bổ ngân sách theo nguyên tắc 50/30/20.'
+        f"Bạn là một trợ lý tài chính tiếng Việt chuyên tư vấn thu chi cá nhân. "
+        f"Dựa trên thói quen: {habit_summary}. Gợi ý: {daily_hint}. "
+        "Hãy trả lời ngắn gọn, cụ thể. Khuyến khích nguyên tắc 50/30/20."
     )
 
 
@@ -252,40 +249,11 @@ def _stream_gemini_response(messages):
 
 
 def get_advisor_response(user, question):
-    session = _create_session(user)
-    _append_message(session, 'user', question)
-    messages = _build_message_payload(user, question)
-
-    if GEMINI_API_KEY:
-        try:
-            response = _call_gemini(messages)
-            assistant_text = _extract_gemini_text(response)
-            if not assistant_text:
-                assistant_text = 'AI Gemini đã trả về nội dung trống. Hãy thử lại sau.'
-        except Exception:
-            assistant_text = (
-                'AI hiện không thể kết nối với Gemini. ' 
-                'Hãy thử lại sau hoặc kiểm tra cấu hình API key.'
-            )
-    else:
-        assistant_text = (
-            'Hiện tại chưa cấu hình Gemini API key. ' 
-            'Tôi vẫn có thể gợi ý chung: hãy theo dõi chi tiêu, tạo ngân sách hàng tuần và ưu tiên tiết kiệm.'
-        )
-
-    _append_message(session, 'assistant', assistant_text)
     return {
-        'text': assistant_text,
-        'cards': [
-            {'title': 'Gợi ý hàng ngày', 'value': get_daily_suggestion(user)['summary']},
-            {'title': 'Tỉ lệ tiết kiệm', 'value': get_daily_suggestion(user)['savings_rate']},
-            {'title': 'Thói quen chi tiêu', 'value': _build_habit_summary(user)[:120] + '...'},
-        ],
-        'history': [
-            {'role': msg.role, 'content': msg.content, 'created_at': msg.created_at}
-            for msg in _load_recent_messages(user)
-        ]
-    }
+        'text': 'AI Advisor is temporarily unavailable.',
+        'cards': [],
+        'history': []
+    }   
 
 
 def stream_advisor_response(user, question):

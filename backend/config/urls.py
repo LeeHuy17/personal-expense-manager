@@ -5,5 +5,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/accounts/', include('accounts.urls')),  # ✅ Thêm dòng này
     path('api/', include('expenses.urls')),  # API cho expenses app
+    path('api/savings/', include('savings.urls')),  # API cho savings app
     path('api/shared-fund/', include('shared_fund.urls')),  # API cho shared_fund app
 ]

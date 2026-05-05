@@ -49,7 +49,7 @@ class LoginView(APIView):
         
         try:
             # Tìm user bằng email
-            user = User.objects.get(email=email)
+            user = User.objects.filter(email=email).first()
             print(f"✅ Tìm thấy user: {user.username} (email: {user.email})")
         except User.DoesNotExist:
             print(f"❌ Không tìm thấy user với email: {email}")
