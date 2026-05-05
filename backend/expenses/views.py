@@ -16,6 +16,24 @@ class ThuNhapViewSet(viewsets.ModelViewSet):
         user = self.request.user
         return ThuNhap.objects.filter(user=user).order_by('-date')
 
+    def create(self, request, *args, **kwargs):
+        print(f"[DEBUG] ThuNhapViewSet.create() - User: {request.user.username}, Data: {request.data}")
+        try:
+            serializer = self.get_serializer(data=request.data)
+            print(f"[DEBUG] Serializer is_valid: {serializer.is_valid()}")
+            if not serializer.is_valid():
+                print(f"[DEBUG] Serializer errors: {serializer.errors}")
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            self.perform_create(serializer)
+            headers = self.get_success_headers(serializer.data)
+            print(f"[DEBUG] Successfully created ThuNhap: {serializer.data}")
+            return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        except Exception as e:
+            print(f"[DEBUG] Error creating ThuNhap: {e}")
+            import traceback
+            print(f"[DEBUG] Traceback: {traceback.format_exc()}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     def perform_create(self, serializer):
         # BẮT BUỘC 3: Khi lưu, phải gán cứng user là người đang đăng nhập
         serializer.save(user=self.request.user)
