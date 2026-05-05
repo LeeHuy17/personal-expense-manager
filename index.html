@@ -980,6 +980,19 @@
       <div id="contribute-modal" class="bg-white dark:bg-slate-900 rounded-[2.5rem] p-8 w-full max-w-md hidden animate-in fade-in zoom-in duration-300 shadow-2xl shadow-orange-200/30 dark:shadow-none border border-orange-50 dark:border-slate-800">
         <h3 class="text-xl font-bold mb-2 text-slate-900 dark:text-white">Góp vốn cho ước mơ</h3>
         <p id="contribute-goal-name" class="text-sm text-orange-600 font-bold mb-6"></p>
+        
+        <!-- Balance Info -->
+        <div class="bg-slate-50 dark:bg-slate-800 rounded-2xl p-4 mb-6">
+          <div class="flex justify-between items-center">
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Số dư hiện tại:</span>
+            <span id="contribute-current-balance" class="text-lg font-bold text-slate-900 dark:text-white">0đ</span>
+          </div>
+          <div class="flex justify-between items-center mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Số dư sau góp:</span>
+            <span id="contribute-remaining-balance" class="text-lg font-bold text-emerald-600">0đ</span>
+          </div>
+        </div>
+        
         <div class="space-y-4">
           <div class="space-y-2">
             <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Số tiền góp (VNĐ)</label>

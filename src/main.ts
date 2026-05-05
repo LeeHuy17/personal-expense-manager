@@ -72,7 +72,7 @@ function normalizeServerGoals(goals: any[]): Goal[] {
     id: String(goal.id ?? goal.uuid ?? Math.random().toString(36).slice(2, 10)),
     name: goal.title || goal.name || 'Không có tên mục tiêu',
     target: Number(goal.target_amount ?? goal.target ?? 0),
-    current: Number(goal.current ?? goal.saved ?? 0),
+    current: Number(goal.current_amount ?? goal.current ?? goal.saved ?? 0),
     deadline: goal.deadline || goal.due_date || '',
   }));
 }
@@ -109,7 +109,7 @@ function renderSavingsGoals(goals: any[]): void {
           <h4 class="text-sm font-bold text-slate-900 dark:text-white">${goal.name}</h4>
           <p class="text-[10px] font-medium text-slate-400">Hạn: ${goal.deadline ? new Date(goal.deadline).toLocaleDateString('vi-VN') : 'Chưa có'}</p>
         </div>
-        <button class="p-2 bg-white dark:bg-slate-900 text-orange-600 rounded-xl shadow-sm hover:shadow-md hover:scale-110 transition-all" onclick="window.handleOpenServerGoalContribute('${goal.id}')">
+        <button class="p-2 bg-white dark:bg-slate-900 text-orange-600 rounded-xl shadow-sm hover:shadow-md hover:scale-110 transition-all" onclick="window.handleOpenServerGoalContribute && window.handleOpenServerGoalContribute('${goal.id}')">
           <i data-lucide="piggy-bank" class="w-4 h-4"></i>
         </button>
       </div>
@@ -1146,6 +1146,24 @@ async function loadProfileData(): Promise<void> {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // 1. Kiểm tra xem có token trong máy không
+    const token = localStorage.getItem('accessToken');
+    
+    if (token) {
+        console.log("Đã tìm thấy token, đang tải dữ liệu...");
+        // 2. Nếu có token, tự động load dữ liệu
+        if (window.loadSavingsGoals) {
+            window.loadSavingsGoals();
+        }
+        
+        // (Tùy chọn) Ẩn form đăng nhập, hiện phần hiển thị dữ liệu
+        // document.getElementById('login-section').style.display = 'none';
+        // document.getElementById('data-section').style.display = 'block';
+    } else {
+        console.log("Chưa đăng nhập, vui lòng đăng nhập.");
+        // Hiển thị form đăng nhập nếu chưa có token
+    }
+
     // 1. Kiểm tra UI khi load trang
     updateNavbar();
 
@@ -3135,33 +3153,103 @@ class ExpenseManager {
     contributeModal.setAttribute('data-goal-id', id);
     document.getElementById('contribute-goal-name')!.textContent = goal.name;
     
+    // Display current balance
+    const currentBalance = this.getCurrentBalance();
+    const balanceEl = document.getElementById('contribute-current-balance')!;
+    balanceEl.textContent = this.formatCurrency(currentBalance);
+    
+    // Reset amount input and remaining balance display
+    const amountInput = document.getElementById('contribute-amount') as HTMLInputElement;
+    amountInput.value = '';
+    const remainingEl = document.getElementById('contribute-remaining-balance')!;
+    remainingEl.textContent = this.formatCurrency(currentBalance);
+    remainingEl.className = 'text-lg font-bold text-emerald-600';
+    
+    // Add real-time balance update on input
+    amountInput.oninput = (e) => {
+      const inputAmount = this.parseFormattedNumber((e.target as HTMLInputElement).value);
+      const remaining = currentBalance - inputAmount;
+      
+      if (isNaN(inputAmount) || inputAmount <= 0) {
+        remainingEl.textContent = this.formatCurrency(currentBalance);
+        remainingEl.className = 'text-lg font-bold text-emerald-600';
+      } else if (inputAmount > currentBalance) {
+        remainingEl.textContent = this.formatCurrency(remaining);
+        remainingEl.className = 'text-lg font-bold text-rose-600';
+      } else {
+        remainingEl.textContent = this.formatCurrency(remaining);
+        remainingEl.className = 'text-lg font-bold text-emerald-600';
+      }
+    };
+    
     overlay.classList.remove('hidden');
     overlay.classList.add('flex');
     contributeModal.classList.remove('hidden');
   }
 
-  private contributeToGoal() {
+  private async contributeToGoal() {
     const contributeModal = document.getElementById('contribute-modal')!;
     const id = contributeModal.getAttribute('data-goal-id');
     const amountInput = document.getElementById('contribute-amount') as HTMLInputElement;
     const amount = this.parseFormattedNumber(amountInput.value);
 
-    if (!id || isNaN(amount) || amount <= 0) return;
+    if (!id || isNaN(amount) || amount <= 0) {
+      this.showToast('Vui lòng nhập số tiền hợp lệ (> 0)', 'error');
+      return;
+    }
 
     const currentBalance = this.getCurrentBalance();
     if (amount > currentBalance) {
-      this.showToast('Số dư không đủ để góp quỹ!', 'error');
+      this.showToast(`Số dư không đủ! Bạn chỉ có ${this.formatCurrency(currentBalance)}`, 'error');
       return;
     }
 
     const goalIndex = this.goals.findIndex(g => g.id === id);
-    if (goalIndex !== -1) {
-      this.goals[goalIndex].current += amount;
+    if (goalIndex === -1) return;
+
+    const goal = this.goals[goalIndex];
+    const goalName = goal.name;
+    const newTotal = goal.current + amount;
+    const remainingAmount = goal.target - newTotal;
+    const token = localStorage.getItem('accessToken');
+
+    try {
+      // 1. Update savings goal on backend
+      const goalResponse = await authFetch(`/savings/goals/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          current_amount: newTotal
+        })
+      });
+
+      if (!goalResponse.ok) {
+        const error = await goalResponse.json();
+        throw new Error(error.detail || 'Không thể cập nhật mục tiêu');
+      }
+
+      // 2. Create expense transaction on backend
+      const today = new Date().toISOString().split('T')[0];
+      const transactionResponse = await authFetch('/expenses/', {
+        method: 'POST',
+        body: JSON.stringify({
+          moTa: `Góp vào quỹ: ${goalName}`,
+          amount: amount,
+          date: today,
+          loai: null // Category will be default or null
+        })
+      });
+
+      if (!transactionResponse.ok) {
+        const error = await transactionResponse.json();
+        throw new Error(error.moTa ? (Array.isArray(error.moTa) ? error.moTa[0] : error.moTa) : error.detail || 'Không thể tạo giao dịch');
+      }
+
+      // 3. Update local data
+      this.goals[goalIndex].current = newTotal;
       
-      // Also add as an expense to reflect in balance
       const transaction: Transaction = {
         id: Math.random().toString(36).substring(2, 9),
-        description: `Tiết kiệm cho: ${this.goals[goalIndex].name}`,
+        description: `Góp vào quỹ: ${goalName}`,
         amount,
         type: 'expense',
         category: 'Khác',
@@ -3170,15 +3258,31 @@ class ExpenseManager {
       this.transactions.unshift(transaction);
       
       this.saveData();
-      this.render();
       this.closeModals();
       amountInput.value = '';
       
-      if (this.goals[goalIndex].current >= this.goals[goalIndex].target) {
-        this.showToast(`Chúc mừng! Bạn đã hoàn thành ước mơ "${this.goals[goalIndex].name}"!`, 'warning');
+      // 4. Reload data from server to keep everything in sync
+      console.log('📥 Reloading data from server after contribution...');
+      await Promise.all([
+        (async () => {
+          if (window.loadSavingsGoals) {
+            await window.loadSavingsGoals();
+          }
+        })(),
+        this.loadAndRender(true) // Skip budget alerts on reload
+      ]);
+      
+      // Show success message
+      if (newTotal >= goal.target) {
+        this.showToast(`🎉 Chúc mừng! Bạn đã hoàn thành ước mơ "${goalName}"!`, 'warning');
       } else {
-        this.showToast(`Đã thêm ${this.formatCurrency(amount)} vào mục tiêu!`, 'warning');
+        const percentComplete = Math.round((newTotal / goal.target) * 100);
+        this.showToast(`✅ Đã góp ${this.formatCurrency(amount)} vào "${goalName}" (${percentComplete}% hoàn thành, còn ${this.formatCurrency(remainingAmount)})`, 'warning');
       }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Lỗi khi góp quỹ';
+      this.showToast(`❌ ${message}`, 'error');
+      console.error('Lỗi góp quỹ:', error);
     }
   }
 
@@ -3882,6 +3986,7 @@ declare global {
     loadSavingsGoals?: () => Promise<void>;
     createSavingsGoal?: (title: string, targetAmount: number, deadline: string) => Promise<boolean>;
     handleAddGoal?: () => Promise<boolean>;
+    handleOpenServerGoalContribute?: (goalId: string) => void;
   }
 }
 
