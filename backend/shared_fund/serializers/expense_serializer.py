@@ -61,9 +61,10 @@ class ExpenseSerializer(serializers.ModelSerializer):
                     raise ValidationError('Mỗi người dùng trong split percentage cần có trường percentage.')
         if splits:
             fund = data.get('fund')
+            valid_member_ids = set(FundMember.objects.filter(fund=fund).values_list('user_id', flat=True)) if fund else set()
             for split_data in splits:
                 user = split_data.get('user')
-                if user and fund and not FundMember.objects.filter(fund=fund, user=user).exists():
+                if user and fund and user.id not in valid_member_ids:
                     raise ValidationError('Người dùng trong splits phải là thành viên của quỹ.')
         return data
 
@@ -82,13 +83,15 @@ class ExpenseSerializer(serializers.ModelSerializer):
                     splits_data[0]['amount_owed'] = round(splits_data[0].get('amount_owed', 0) + diff, 2)
 
                 per_share = round(expense.amount / len(splits_data), 2) if expense.amount else 0
+                split_objects = []
                 for split_data in splits_data:
-                    ExpenseSplit.objects.create(
+                    split_objects.append(ExpenseSplit(
                         expense=expense,
                         user=split_data['user'],
                         amount_owed=round(split_data.get('amount_owed', per_share), 2),
                         percentage=round((split_data.get('amount_owed', per_share) / expense.amount) * 100, 2) if expense.amount else None,
-                    )
+                    ))
+                ExpenseSplit.objects.bulk_create(split_objects)
                 return expense
 
             members = FundMember.objects.filter(fund=expense.fund).select_related('user')
@@ -97,30 +100,35 @@ class ExpenseSerializer(serializers.ModelSerializer):
                 raise ValidationError('Quỹ cần có ít nhất một thành viên để chia đều.')
             base_amount = round(expense.amount / count, 2)
             remainder = round(expense.amount - base_amount * count, 2)
+            split_objects = []
             for index, membership in enumerate(members):
                 owed = base_amount + (remainder if index == 0 else 0)
-                ExpenseSplit.objects.create(
+                split_objects.append(ExpenseSplit(
                     expense=expense,
                     user=membership.user,
                     amount_owed=owed,
                     percentage=round((owed / expense.amount) * 100, 2) if expense.amount else None,
-                )
+                ))
+            ExpenseSplit.objects.bulk_create(split_objects)
             return expense
 
         if split_type == Expense.SPLIT_PERCENTAGE:
+            split_objects = []
             for split_data in splits_data:
                 percentage = split_data.get('percentage', 0)
                 owed = round(expense.amount * percentage / 100.0, 2)
-                ExpenseSplit.objects.create(
+                split_objects.append(ExpenseSplit(
                     expense=expense,
                     user=split_data['user'],
                     amount_owed=owed,
                     percentage=percentage,
-                )
+                ))
+            ExpenseSplit.objects.bulk_create(split_objects)
             return expense
 
-        for split_data in splits_data:
-            ExpenseSplit.objects.create(expense=expense, **split_data)
+        split_objects = [ExpenseSplit(expense=expense, **split_data) for split_data in splits_data]
+        if split_objects:
+            ExpenseSplit.objects.bulk_create(split_objects)
 
         return expense
 

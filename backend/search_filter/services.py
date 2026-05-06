@@ -9,14 +9,13 @@ from .models import RecentSearch
 class TransactionSearchService:
     def search_transactions(self, user, keyword='', date_from=None, date_to=None, category=None,
                         transaction_type=None, amount_min=None, amount_max=None, sort_by='date-desc'):
-        print(f"[DEBUG] TransactionSearchService.search_transactions called with: user={user.username}, keyword='{keyword}', date_from={date_from}, date_to={date_to}, category={category}, transaction_type={transaction_type}, sort_by='{sort_by}'")
         transactions = []
+        keyword = keyword.strip() if keyword else ''
 
         # Personal expenses
         if transaction_type in [None, 'expense', 'all']:
-            expenses = ChiPhi.objects.filter(user=user)
+            expenses = ChiPhi.objects.filter(user=user).select_related('loai')
             if keyword:
-                keyword = keyword.strip()
                 expenses = expenses.filter(
                     Q(moTa__icontains=keyword) | Q(loai__tenLoai__icontains=keyword)
                 )
@@ -46,9 +45,8 @@ class TransactionSearchService:
 
         # Personal incomes
         if transaction_type in [None, 'income', 'all']:
-            incomes = ThuNhap.objects.filter(user=user)
+            incomes = ThuNhap.objects.filter(user=user).select_related('loai')
             if keyword:
-                keyword = keyword.strip()
                 incomes = incomes.filter(
                     Q(moTa__icontains=keyword) | Q(loai__tenLoai__icontains=keyword)
                 )
@@ -80,9 +78,8 @@ class TransactionSearchService:
         if transaction_type in [None, 'shared', 'all']:
             # Get funds where user is member
             user_funds = FundMember.objects.filter(user=user).values_list('fund', flat=True)
-            shared_expenses = SharedExpense.objects.filter(fund__in=user_funds)
+            shared_expenses = SharedExpense.objects.filter(fund__in=user_funds).select_related('fund')
             if keyword:
-                keyword = keyword.strip()
                 shared_expenses = shared_expenses.filter(description__icontains=keyword)
             if date_from:
                 shared_expenses = shared_expenses.filter(date__gte=date_from)

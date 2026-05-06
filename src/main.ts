@@ -1527,6 +1527,7 @@ interface Transaction {
   category_name: string;
   categoryId?: number | string;
   date: string;
+  parsedDate?: number;
   incomeId?: number;  // 🔑 Primary key for income records
   chiPhiId?: number;  // 🔑 Primary key for expense records
 }
@@ -1566,6 +1567,7 @@ class ExpenseManager {
   private isLoggedIn: boolean = false;
   private currentCategoryType: 'Thu nhập' | 'Chi tiêu' = 'Chi tiêu';
   private currentCategoryFilter: string = 'all';
+  private categoryLookup: Record<string, Category> = {};
 
   // Elements
   private landingView: HTMLElement;
@@ -2313,39 +2315,44 @@ class ExpenseManager {
         axios.get('http://127.0.0.1:8000/api/expenses/', { headers })
       ]);
 
+      this.rebuildCategoryLookup();
+      const categoryMap = this.categoryLookup;
+
       // Map income data
       const mappedIncomes: Transaction[] = incomeRes.data.map((item: any) => {
-        const categoryName = this.categories.find(c => c.id.toString() === item.loai?.toString())?.name || 'Khác';
+        const rawDate = item.date || new Date().toISOString();
         return {
           id: item.incomeId?.toString() || Math.random().toString(),
           incomeId: item.incomeId,  // 🔑 Store primary key for delete operations
           description: item.moTa || 'Thu nhập',
           amount: parseFloat(item.amount),
           type: 'income' as const,
-          category: categoryName,
+          category_name: categoryMap[String(item.loai)]?.name || 'Khác',
           categoryId: item.loai,
-          date: item.date || new Date().toISOString()
+          date: rawDate,
+          parsedDate: Number(new Date(rawDate).getTime()) || 0,
         };
       });
 
       // Map expense data
       const mappedExpenses: Transaction[] = expenseRes.data.map((item: any) => {
-        const categoryName = this.categories.find(c => c.id.toString() === item.loai?.toString())?.name || 'Khác';
+        const rawDate = item.date || new Date().toISOString();
         return {
           id: item.chiPhiId?.toString() || Math.random().toString(),
           chiPhiId: item.chiPhiId,  // 🔑 Store primary key for delete operations
           description: item.moTa || 'Chi tiêu',
           amount: parseFloat(item.amount),
           type: 'expense' as const,
-          category: categoryName,
+          category_name: categoryMap[String(item.loai)]?.name || 'Khác',
           categoryId: item.loai,
-          date: item.date || new Date().toISOString()
+          date: rawDate,
+          parsedDate: Number(new Date(rawDate).getTime()) || 0,
         };
       });
 
       // Merge and sort by date (newest first)
-      const allTransactions = [...mappedIncomes, ...mappedExpenses].sort((a, b) => 
-        new Date(b.date).getTime() - new Date(a.date).getTime()
+      const allTransactions = [...mappedIncomes, ...mappedExpenses].sort((a, b) =>
+        (b.parsedDate || 0) - (a.parsedDate || 0)
       );
 
       console.log('✅ Fetched incomes:', mappedIncomes.length, 'expenses:', mappedExpenses.length);
@@ -2360,7 +2367,9 @@ class ExpenseManager {
 
   private loadData() {
     const savedTransactions = localStorage.getItem('transactions');
-    if (savedTransactions) this.transactions = JSON.parse(savedTransactions);
+    if (savedTransactions) {
+      this.transactions = JSON.parse(savedTransactions).map((tx: Transaction) => this.normalizeTransaction(tx));
+    }
 
     const savedCategories = localStorage.getItem('categories');
     if (savedCategories) {
@@ -2378,6 +2387,7 @@ class ExpenseManager {
           type: item.type
         }));
       }
+      this.rebuildCategoryLookup();
     }
 
     const savedBudgets = localStorage.getItem('categoryBudgets');
@@ -2385,13 +2395,53 @@ class ExpenseManager {
 
     const savedGoals = localStorage.getItem('goals');
     if (savedGoals) this.goals = JSON.parse(savedGoals);
+
+    this.rebuildCategoryLookup();
   }
 
   private saveData() {
+    this.rebuildCategoryLookup();
     localStorage.setItem('transactions', JSON.stringify(this.transactions));
     localStorage.setItem('categories', JSON.stringify(this.categories));
     localStorage.setItem('categoryBudgets', JSON.stringify(this.categoryBudgets));
     localStorage.setItem('goals', JSON.stringify(this.goals));
+  }
+
+  private rebuildCategoryLookup(): void {
+    this.categoryLookup = {};
+    this.categories.forEach((category) => {
+      this.categoryLookup[String(category.id)] = category;
+      this.categoryLookup[String(category.name)] = category;
+    });
+  }
+
+  private getCategoryMeta(categoryOrId: string | number | undefined): Category {
+    if (!categoryOrId) {
+      return { id: 'unknown', name: 'Khác', icon: 'tag', color: '#64748b', type: 'Chi tiêu' };
+    }
+    return this.categoryLookup[String(categoryOrId)] || this.categoryLookup['Khác'] || { id: 'unknown', name: 'Khác', icon: 'tag', color: '#64748b', type: 'Chi tiêu' };
+  }
+
+  private normalizeTransaction(transaction: Transaction): Transaction {
+    if (transaction.parsedDate !== undefined) {
+      return transaction;
+    }
+    const rawDate = transaction.date || new Date().toISOString();
+    const parsedDate = Number(new Date(rawDate).getTime()) || 0;
+    return {
+      ...transaction,
+      date: rawDate,
+      parsedDate,
+    };
+  }
+
+  private getTransactionTimestamp(transaction: Transaction): number {
+    if (transaction.parsedDate !== undefined) {
+      return transaction.parsedDate;
+    }
+    const parsedDate = Number(new Date(transaction.date).getTime()) || 0;
+    transaction.parsedDate = parsedDate;
+    return parsedDate;
   }
 
   private addMockData(): void {
@@ -2506,6 +2556,7 @@ class ExpenseManager {
         color: cat.color,
         type: cat.type
       }));
+      this.rebuildCategoryLookup();
 
       this.saveData(); // Lưu vào localStorage để đồng bộ
       this.updateCategoryDropdowns();
@@ -3107,7 +3158,8 @@ class ExpenseManager {
     Object.entries(this.categoryBudgets).forEach(([category, amount]) => {
       const spent = this.transactions
         .filter(t => {
-          const d = new Date(t.date);
+          const txTimestamp = this.getTransactionTimestamp(t);
+          const d = new Date(txTimestamp);
           return t.type === 'expense' && t.category_name === category && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
         })
         .reduce((sum, t) => sum + t.amount, 0);
@@ -3138,7 +3190,8 @@ class ExpenseManager {
     this.budgetListEl.innerHTML = budgetEntries.map(([category, amount]) => {
       const spent = this.transactions
         .filter(t => {
-          const d = new Date(t.date);
+          const txTimestamp = this.getTransactionTimestamp(t);
+          const d = new Date(txTimestamp);
           return t.type === 'expense' && t.category_name === category && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
         })
         .reduce((sum, t) => sum + t.amount, 0);
@@ -3460,19 +3513,20 @@ class ExpenseManager {
   private getFilteredTransactions(): Transaction[] {
     const searchTerm = this.searchInput.value.toLowerCase();
     const catFilter = this.filterCategory.value;
+    const fromTimestamp = this.dateFrom ? new Date(this.dateFrom).getTime() : null;
+    const toTimestamp = this.dateTo ? new Date(this.dateTo).setHours(23, 59, 59, 999) : null;
 
     let filtered = this.transactions.filter(t => {
       const matchesSearch = t.description.toLowerCase().includes(searchTerm) || t.category_name.toLowerCase().includes(searchTerm);
       const matchesCat = catFilter === 'all' || t.category_name === catFilter;
       
       let matchesDate = true;
-      if (this.dateFrom) {
-        matchesDate = matchesDate && new Date(t.date) >= new Date(this.dateFrom);
+      const txTimestamp = this.getTransactionTimestamp(t);
+      if (fromTimestamp !== null) {
+        matchesDate = matchesDate && txTimestamp >= fromTimestamp;
       }
-      if (this.dateTo) {
-        const toDate = new Date(this.dateTo);
-        toDate.setHours(23, 59, 59, 999);
-        matchesDate = matchesDate && new Date(t.date) <= toDate;
+      if (toTimestamp !== null) {
+        matchesDate = matchesDate && txTimestamp <= toTimestamp;
       }
 
       return matchesSearch && matchesCat && matchesDate;
@@ -3480,9 +3534,11 @@ class ExpenseManager {
 
     // Sorting
     filtered.sort((a, b) => {
+      const aTs = this.getTransactionTimestamp(a);
+      const bTs = this.getTransactionTimestamp(b);
       switch (this.sortBy) {
-        case 'date-desc': return new Date(b.date).getTime() - new Date(a.date).getTime();
-        case 'date-asc': return new Date(a.date).getTime() - new Date(b.date).getTime();
+        case 'date-desc': return bTs - aTs;
+        case 'date-asc': return aTs - bTs;
         case 'amount-desc': return b.amount - a.amount;
         case 'amount-asc': return a.amount - b.amount;
         case 'category': return a.category_name.localeCompare(b.category_name);
@@ -3516,7 +3572,7 @@ class ExpenseManager {
     }
 
     this.listEl.innerHTML = this.transactions.map((t) => {
-      const categoryObj = this.categories.find(c => c.name === t.category_name || c.id === t.category_name) || { icon: 'tag', color: '#64748b' };
+      const categoryObj = this.getCategoryMeta(t.category_name || t.categoryId);
       const displayId = t.id;
 
       return `
@@ -3859,7 +3915,7 @@ class ExpenseManager {
     }
     
     // Find category object for icon and color
-    const categoryObj = this.categories.find(c => c.name === category) || { icon: 'tag', color: '#64748b' };
+    const categoryObj = this.getCategoryMeta(category || undefined);
     
     // Create HTML
     item.className = 'p-6 flex items-center justify-between hover:bg-orange-50/30 dark:hover:bg-slate-800 transition-all group animate-in slide-in-from-bottom-4 fade-in duration-500';
@@ -3942,11 +3998,9 @@ class ExpenseManager {
     }
 
     this.listEl.innerHTML = paginated.map((t, index) => {
-      const categoryObj = this.categories.find(c => c.name === t.category_name) || { icon: 'tag', color: '#64748b' };
+      const categoryObj = this.getCategoryMeta(t.category_name || t.categoryId);
       const primaryId = t.type === 'income' ? t.incomeId : t.chiPhiId;
       const displayId = primaryId || t.id;
-
-      console.log(`🔍 [RENDER] Transaction - Type: ${t.type}, Primary ID: ${primaryId}, Display ID: ${displayId}`);
 
       return `
       <div data-id="${displayId}" class="p-6 flex items-center justify-between hover:bg-orange-50/30 dark:hover:bg-slate-800 transition-all group animate-in slide-in-from-bottom-4 fade-in duration-500" style="animation-delay: ${index * 30}ms">
