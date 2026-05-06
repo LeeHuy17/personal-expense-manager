@@ -23,6 +23,7 @@ urlpatterns = [
     path('api/', include('expenses.urls')),
     path('shared-fund/', include('shared_fund.ui_urls')),
     path('api/savings/', include('savings.urls')),
+    path('api/', include('budgets.urls')),
 ]
 
 # Serve media files during development
