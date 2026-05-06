@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Expense Manager • Backend Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: 'Inter', sans-serif;
+      --bg: #0A0F1E;
+      --surface: rgba(7, 13, 28, 0.95);
+      --surface-strong: rgba(6, 11, 20, 0.98);
+      --surface-soft: rgba(15, 22, 41, 0.8);
+      --border: rgba(245, 200, 66, 0.18);
+      --text: #E6EDF7;
+      --muted: #8EA4BF;
+      --gold: #F5C842;
+      --green: #00D4AA;
+      --red: #FF4D6A;
+      --shadow: 0 32px 100px rgba(0, 0, 0, 0.25);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: radial-gradient(circle at top left, rgba(245,200,66,.05), transparent 18%),
+                  radial-gradient(circle at bottom right, rgba(0,212,170,.05), transparent 22%),
+                  linear-gradient(180deg, #090f1d 0%, #070c16 100%);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px),
+                        linear-gradient(180deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 42px 42px;
+      pointer-events: none;
+      opacity: 0.05;
+      z-index: 0;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    button {
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .page-shell {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      min-height: 100vh;
+      position: relative;
+      z-index: 1;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 32px 24px;
+      background: #060B14;
+      border-right: 1px solid rgba(245, 200, 66, 0.08);
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+      z-index: 2;
+    }
+
+    .brand {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .brand-title {
+      color: var(--text);
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      margin: 0;
+    }
+
+    .brand-subtitle {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.25em;
+    }
+
+    .brand-underline {
+      width: 72px;
+      height: 2px;
+      background: linear-gradient(90deg, rgba(245,200,66,1), rgba(245,200,66,0));
+      border-radius: 999px;
+    }
+
+    .nav-group {
+      display: grid;
+      gap: 12px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 16px 18px;
+      border-radius: 18px;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--text);
+      transition: transform 0.24s ease, box-shadow 0.24s ease, background 0.24s ease;
+    }
+
+    .nav-item:hover {
+      transform: translateX(4px);
+      box-shadow: 0 20px 50px rgba(245, 200, 66, 0.12);
+      background: rgba(245, 200, 66, 0.08);
+    }
+
+    .nav-item.active {
+      border-left: 4px solid var(--gold);
+      background: rgba(245, 200, 66, 0.08);
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .icon-pill {
+      width: 38px;
+      height: 38px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      background: rgba(245, 200, 66, 0.15);
+      color: var(--gold);
+      font-size: 16px;
+    }
+
+    .nav-label {
+      display: grid;
+      gap: 4px;
+    }
+
+    .nav-label span:first-child {
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 36px;
+      height: 28px;
+      border-radius: 999px;
+      background: rgba(245, 200, 66, 0.12);
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding: 18px;
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(245, 200, 66, 0.1);
+      display: grid;
+      gap: 12px;
+    }
+
+    .profile-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(245,200,66,0.15), rgba(0,212,170,0.15));
+      display: grid;
+      place-items: center;
+      color: var(--gold);
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .profile-info {
+      display: grid;
+      gap: 4px;
+    }
+
+    .profile-name {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .profile-role {
+      margin: 0;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .content {
+      position: relative;
+      padding: 32px;
+      overflow: hidden;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 28px;
+      padding: 26px 32px;
+      border-radius: 28px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(245, 200, 66, 0.08);
+      box-shadow: rgba(0,0,0,.18) 0 24px 60px -40px;
+    }
+
+    .search-bar {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 22px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.08);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+    }
+
+    .search-bar input {
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: var(--text);
+      outline: none;
+      font-size: 14px;
+    }
+
+    .pill-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 22px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      font-weight: 700;
+      transition: transform .2s ease, box-shadow .2s ease, background .2s ease;
+    }
+
+    .pill-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 16px 40px rgba(245, 200, 66, 0.18);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #F7D75F, #F5C842);
+      color: #08101d;
+      box-shadow: 0 18px 50px rgba(245, 200, 66, 0.25);
+    }
+
+    .btn-secondary {
+      border-color: rgba(245, 200, 66, 0.2);
+      color: var(--text);
+      background: rgba(255,255,255,0.04);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .header-actions button {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: var(--text);
+      width: 50px;
+      height: 50px;
+      border-radius: 18px;
+    }
+
+    .topbar-right {
+      display: grid;
+      gap: 10px;
+      text-align: right;
+    }
+
+    .topbar-title {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .topbar-meta {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(360px, 1fr);
+      gap: 28px;
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 18px;
+      margin-bottom: 24px;
+    }
+
+    .kpi-card {
+      position: relative;
+      padding: 24px;
+      border-radius: 28px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(245, 200, 66, 0.08);
+      box-shadow: rgba(0,0,0,.14) 0 24px 60px -40px;
+      overflow: hidden;
+      transition: transform .3s ease, box-shadow .3s ease;
+    }
+
+    .kpi-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 28px 70px rgba(245,200,66,0.2);
+    }
+
+    .kpi-card::before {
+      content: '';
+      position: absolute;
+      right: -24px;
+      top: -24px;
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      background: rgba(245, 200, 66, 0.08);
+    }
+
+    .kpi-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.22em;
+      color: var(--muted);
+      margin: 0 0 12px;
+    }
+
+    .kpi-value {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+    }
+
+    .kpi-note {
+      margin: 14px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .card-row {
+      display: grid;
+      gap: 18px;
+    }
+
+    .module-card,
+    .activity-card,
+    .accordion-card {
+      border-radius: 28px;
+      padding: 24px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(245, 200, 66, 0.08);
+      box-shadow: rgba(0,0,0,.12) 0 20px 50px -30px;
+      transition: transform .3s ease, box-shadow .3s ease;
+    }
+
+    .module-card:hover,
+    .activity-card:hover,
+    .accordion-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 24px 60px rgba(245,200,66,0.16);
+    }
+
+    .module-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      padding: 18px;
+      align-items: center;
+      border-radius: 24px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      transition: background .2s ease;
+    }
+
+    .module-row:hover {
+      background: rgba(245, 200, 66, 0.08);
+    }
+
+    .module-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .module-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      background: rgba(255,255,255,0.08);
+      color: var(--gold);
+      font-size: 20px;
+    }
+
+    .module-label {
+      display: grid;
+      gap: 6px;
+    }
+
+    .module-title {
+      margin: 0;
+      font-weight: 700;
+      font-size: 16px;
+    }
+
+    .module-count {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .module-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .action-pill {
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+      padding: 10px 18px;
+      font-size: 12px;
+      font-weight: 700;
+      transition: transform .2s ease, background .2s ease;
+    }
+
+    .action-pill:hover {
+      background: rgba(245, 200, 66, 0.14);
+      transform: translateY(-1px);
+    }
+
+    .activity-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .activity-title {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .activity-list {
+      display: grid;
+      gap: 14px;
+    }
+
+    .activity-item {
+      display: grid;
+      gap: 10px;
+      padding: 18px;
+      border-radius: 22px;
+      background: rgba(255,255,255,0.03);
+      border-left: 4px solid rgba(0,212,170,0.9);
+      animation: slideIn 0.45s ease;
+    }
+
+    .activity-item:nth-child(odd) {
+      border-left-color: rgba(245, 200, 66, 0.85);
+    }
+
+    .activity-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .activity-text {
+      margin: 0;
+      line-height: 1.7;
+    }
+
+    .accordion {
+      display: grid;
+      gap: 14px;
+    }
+
+    .accordion-card {
+      overflow: hidden;
+    }
+
+    .accordion-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      cursor: pointer;
+    }
+
+    .accordion-title {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin: 0;
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .badge-chip {
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .accordion-body {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height .35s ease, padding .35s ease;
+      padding: 0 0;
+    }
+
+    .accordion-body.open {
+      padding: 18px 0 0;
+      max-height: 400px;
+    }
+
+    .section-card {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .section-item {
+      border-radius: 22px;
+      padding: 18px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      transition: transform .2s ease;
+    }
+
+    .section-item:hover {
+      transform: translateY(-2px);
+      background: rgba(245,200,66,0.08);
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .footer-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 24px;
+      color: var(--muted);
+      font-size: 12px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .footer-nav a {
+      color: var(--muted);
+      transition: color .2s ease;
+    }
+
+    .footer-nav a:hover {
+      color: var(--gold);
+    }
+
+    .notification-dot {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--red);
+      box-shadow: 0 0 0 4px rgba(255,77,106,0.15);
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(20px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    @media (max-width: 1120px) {
+      .page-shell { grid-template-columns: 1fr; }
+      .sidebar { position: relative; height: auto; width: 100%; }
+      .main-grid { grid-template-columns: 1fr; }
+      .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 760px) {
+      .sidebar { display: none; }
+      .topbar { flex-direction: column; align-items: stretch; }
+      .search-bar { width: 100%; }
+      .header-actions { justify-content: space-between; }
+      .kpi-grid { grid-template-columns: 1fr; }
+      .section-card { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-title">Expense Manager</div>
+        <p class="brand-subtitle">Backend Admin</p>
+        <div class="brand-underline"></div>
+      </div>
+
+      <div class="nav-group">
+        <a class="nav-item {% if section == 'overview' %}active{% endif %}" href="/backend-ui/">
+          <div class="nav-left">
+            <div class="icon-pill">O</div>
+            <div class="nav-label"><span>Overview</span><small>Dashboard tổng quan</small></div>
+          </div>
+          <span class="badge">{{ transaction_count_display }}</span>
+        </a>
+        <a class="nav-item {% if section == 'accounts' %}active{% endif %}" href="/backend-ui/accounts/">
+          <div class="nav-left">
+            <div class="icon-pill">A</div>
+            <div class="nav-label"><span>Accounts</span><small>Người dùng & Admin</small></div>
+          </div>
+          <span class="badge">{{ total_users_display }}</span>
+        </a>
+        <a class="nav-item {% if section == 'expenses' %}active{% endif %}" href="/backend-ui/expenses/">
+          <div class="nav-left">
+            <div class="icon-pill">E</div>
+            <div class="nav-label"><span>Expenses</span><small>Chi tiêu</small></div>
+          </div>
+          <span class="badge">{{ expense_count_display }}</span>
+        </a>
+        <a class="nav-item {% if section == 'savings' %}active{% endif %}" href="/backend-ui/savings/">
+          <div class="nav-left">
+            <div class="icon-pill">S</div>
+            <div class="nav-label"><span>Savings</span><small>Tiết kiệm</small></div>
+          </div>
+          <span class="badge">{{ savings_goal_count }}</span>
+        </a>
+        <a class="nav-item {% if section == 'budgets' %}active{% endif %}" href="/backend-ui/budgets/">
+          <div class="nav-left">
+            <div class="icon-pill">B</div>
+            <div class="nav-label"><span>Budgets</span><small>Ngân sách</small></div>
+          </div>
+          <span class="badge">{{ budget_count }}</span>
+        </a>
+        <a class="nav-item {% if section == 'shared-fund' %}active{% endif %}" href="/backend-ui/shared-fund/">
+          <div class="nav-left">
+            <div class="icon-pill">F</div>
+            <div class="nav-label"><span>Shared Fund</span><small>Quỹ chung</small></div>
+          </div>
+          <span class="badge">{{ shared_fund_count }}</span>
+        </a>
+        <a class="nav-item" href="/backend-ui/">
+          <div class="nav-left">
+            <div class="icon-pill">T</div>
+            <div class="nav-label"><span>Transactions</span><small>Giao dịch</small></div>
+          </div>
+          <span class="badge">{{ transaction_count_display }}</span>
+        </a>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="profile-row">
+          <div class="avatar">{{ user_name|slice:":1" }}</div>
+          <div class="profile-info">
+            <p class="profile-name">{{ user_name }}</p>
+            <p class="profile-role">Super Admin</p>
+          </div>
+        </div>
+        <button class="pill-btn btn-secondary" onclick="window.location.href='http://localhost:3003/'">Quay về Login</button>
+      </div>
+    </aside>
+
+    <section class="content">
+      <div class="topbar">
+        <div class="search-bar">
+          <span>⌘</span>
+          <input type="text" placeholder="Tìm nhanh... (CMD+K)" aria-label="Tìm kiếm" />
+        </div>
+
+        <div class="header-actions">
+          <button title="Notifications" style="position:relative;"><span class="notification-dot"></span>🔔</button>
+          <button class="pill-btn btn-primary">+ New Expense</button>
+        </div>
+
+        <div class="topbar-right">
+          <p class="topbar-title">Xin chào, {{ user_name }}</p>
+          <p class="topbar-meta">Admin dashboard • {{ section_title }} • <span id="realtime-clock">--:--:--</span></p>
+        </div>
+      </div>
+
+      <div class="kpi-grid">
+        <article class="kpi-card">
+          <p class="kpi-title">Total Expenses</p>
+          <h3 class="kpi-value">{{ total_expense_amount_display }}</h3>
+          <p class="kpi-note">{{ expense_count_display }} giao dịch chi tiêu</p>
+        </article>
+        <article class="kpi-card">
+          <p class="kpi-title">Budget Remaining</p>
+          <h3 class="kpi-value">{{ budget_remaining_display }}</h3>
+          <p class="kpi-note">Dựa trên {{ budget_count }} ngân sách</p>
+        </article>
+        <article class="kpi-card">
+          <p class="kpi-title">Total Savings</p>
+          <h3 class="kpi-value">{{ total_savings_display }}</h3>
+          <p class="kpi-note">{{ savings_goal_count }} mục tiêu tiết kiệm</p>
+        </article>
+        <article class="kpi-card">
+          <p class="kpi-title">Active Users</p>
+          <h3 class="kpi-value">{{ active_users }}</h3>
+          <p class="kpi-note">{{ recent_signups_display }} đăng ký mới trong 7 ngày</p>
+        </article>
+      </div>
+
+      <div class="main-grid">
+        {% if section == 'overview' %}
+        <div class="card-row">
+          <section class="module-card">
+            <div class="activity-header">
+              <div>
+                <h2 class="activity-title">Module Management</h2>
+                <p class="topbar-meta">Quản lý thành phần chính của Expense Manager</p>
+              </div>
+              <button class="pill-btn btn-secondary" onclick="window.location.href='/backend-ui/accounts/'">Xem Accounts</button>
+            </div>
+
+            <div class="module-row">
+              <div class="module-left">
+                <div class="module-icon">👤</div>
+                <div class="module-label">
+                  <p class="module-title">Accounts</p>
+                  <p class="module-count">{{ total_users_display }} users, {{ admin_users_display }} admin</p>
+                </div>
+              </div>
+              <div class="module-actions">
+                <button class="action-pill" onclick="window.location.href='/backend-ui/accounts/'">View</button>
+                <button class="action-pill" onclick="window.location.href='/admin/auth/user/'">✎ Edit</button>
+              </div>
+            </div>
+
+            <div class="module-row">
+              <div class="module-left">
+                <div class="module-icon">💸</div>
+                <div class="module-label">
+                  <p class="module-title">Expenses</p>
+                  <p class="module-count">{{ expense_count_display }} records</p>
+                </div>
+              </div>
+              <div class="module-actions">
+                <button class="action-pill" onclick="window.location.href='/backend-ui/expenses/'">View</button>
+                <button class="action-pill" onclick="window.location.href='/admin/expenses/chiphi/'">✎ Edit</button>
+              </div>
+            </div>
+
+            <div class="module-row">
+              <div class="module-left">
+                <div class="module-icon">🏦</div>
+                <div class="module-label">
+                  <p class="module-title">Savings</p>
+                  <p class="module-count">{{ savings_goal_count }} goals</p>
+                </div>
+              </div>
+              <div class="module-actions">
+                <button class="action-pill" onclick="window.location.href='/backend-ui/savings/'">View</button>
+                <button class="action-pill" onclick="window.location.href='/admin/savings/savingsgoal/'">✎ Edit</button>
+              </div>
+            </div>
+
+            <div class="module-row">
+              <div class="module-left">
+                <div class="module-icon">📊</div>
+                <div class="module-label">
+                  <p class="module-title">Budgets</p>
+                  <p class="module-count">{{ budget_count }} budgets</p>
+                </div>
+              </div>
+              <div class="module-actions">
+                <button class="action-pill" onclick="window.location.href='/backend-ui/budgets/'">View</button>
+                <button class="action-pill" onclick="window.location.href='/admin/budgets/budget/'">✎ Edit</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="activity-card">
+            <div class="activity-header">
+              <div>
+                <h2 class="activity-title">Recent Activity</h2>
+                <p class="topbar-meta">Timeline chuyển động theo thời gian thực</p>
+              </div>
+            </div>
+            <div class="activity-list">
+              <div class="activity-item">
+                <p class="activity-text"><strong>New admin user</strong> đã được thêm vào hệ thống.</p>
+                <div class="activity-meta"><span>1 phút trước</span><span class="chip">Accounts</span></div>
+              </div>
+              <div class="activity-item">
+                <p class="activity-text"><strong>Chi tiêu mới</strong> 4.2Kđ được ghi nhận cho Marketing.</p>
+                <div class="activity-meta"><span>8 phút trước</span><span class="chip" style="background: rgba(0,212,170,0.12); border-color: rgba(0,212,170,0.18);">Success</span></div>
+              </div>
+              <div class="activity-item">
+                <p class="activity-text"><strong>Ngân sách</strong> tháng 5 đã giảm 12% so với định mức.</p>
+                <div class="activity-meta"><span>22 phút trước</span><span class="chip" style="background: rgba(255,77,106,0.12); border-color: rgba(255,77,106,0.18);">Alert</span></div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="accordion">
+          <div class="accordion-card">
+            <div class="accordion-header" onclick="toggleAccordion(this)">
+              <h3 class="accordion-title"><span>📁</span> Accounts Overview</h3>
+              <span class="badge-chip">{{ total_users_display }} users</span>
+            </div>
+            <div class="accordion-body open">
+              <div class="section-card">
+                <div class="section-item"><p class="module-title">Active admins</p><p class="module-count">{{ admin_users_display }}</p></div>
+                <div class="section-item"><p class="module-title">Pending invites</p><p class="module-count">{{ pending_invites }}</p></div>
+                <div class="section-item"><p class="module-title">Failed logins</p><p class="module-count">2</p></div>
+                <div class="section-item"><p class="module-title">Recent signups</p><p class="module-count">{{ recent_signups_display }}</p></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="accordion-card">
+            <div class="accordion-header" onclick="toggleAccordion(this)">
+              <h3 class="accordion-title"><span>💼</span> Expense Controls</h3>
+              <span class="badge-chip">5 sections</span>
+            </div>
+            <div class="accordion-body">
+              <div class="section-card">
+                <div class="section-item"><p class="module-title">Approval queue</p><p class="module-count">3 pending</p></div>
+                <div class="section-item"><p class="module-title">Category rules</p><p class="module-count">18 active</p></div>
+                <div class="section-item"><p class="module-title">Top categories</p><p class="module-count">6</p></div>
+                <div class="section-item"><p class="module-title">Audit logs</p><p class="module-count">1.9K</p></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="accordion-card">
+            <div class="accordion-header" onclick="toggleAccordion(this)">
+              <h3 class="accordion-title"><span>📈</span> Savings & Budget</h3>
+              <span class="badge-chip">16 goals</span>
+            </div>
+            <div class="accordion-body">
+              <div class="section-card">
+                <div class="section-item"><p class="module-title">Savings progress</p><p class="module-count">82%</p></div>
+                <div class="section-item"><p class="module-title">Budget alerts</p><p class="module-count">4 active</p></div>
+                <div class="section-item"><p class="module-title">Forecast</p><p class="module-count">+7.8%</p></div>
+                <div class="section-item"><p class="module-title">Monthly cadence</p><p class="module-count">3 cycles</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      {% elif section == 'accounts' %}
+        <div class="card-row">
+          <section class="module-card">
+            <div class="activity-header">
+              <div>
+                <h2 class="activity-title">Account Management</h2>
+                <p class="topbar-meta">Thông tin người dùng và admin</p>
+              </div>
+              <button class="pill-btn btn-primary" onclick="window.location.href='/backend-ui/'">Về Overview</button>
+            </div>
+
+            <div class="module-row">
+              <div class="module-left">
+                <div class="module-icon">👥</div>
+                <div class="module-label">
+                  <p class="module-title">Tổng số tài khoản</p>
+                  <p class="module-count">{{ total_users_display }}</p>
+                </div>
+              </div>
+            </div>
+            <div class="module-row">
+              <div class="module-left">
+                <div class="module-icon">🛡️</div>
+                <div class="module-label">
+                  <p class="module-title">Admin active</p>
+                  <p class="module-count">{{ admin_users_display }}</p>
+                </div>
+              </div>
+            </div>
+            <div class="module-row">
+              <div class="module-left">
+                <div class="module-icon">📈</div>
+                <div class="module-label">
+                  <p class="module-title">Đăng ký mới 7 ngày</p>
+                  <p class="module-count">{{ recent_signups_display }}</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="activity-card">
+            <div class="activity-header">
+              <div>
+                <h2 class="activity-title">Account Actions</h2>
+                <p class="topbar-meta">Quản lý bổ sung và xem chi tiết</p>
+              </div>
+            </div>
+            <div class="activity-list">
+              <div class="activity-item">
+                <p class="activity-text"><strong>Pending invitations</strong> hiện có {{ pending_invites }} lời mời.</p>
+                <div class="activity-meta"><span>Accounts</span><span class="chip">Pending</span></div>
+              </div>
+              <div class="activity-item">
+                <p class="activity-text"><strong>Manage roles</strong> và phân quyền người dùng.</p>
+                <div class="activity-meta"><span>Security</span><span class="chip">Admin</span></div>
+              </div>
+            </div>
+          </section>
+        </div>
+      {% elif section == 'expenses' %}
+        <div class="card-row">
+          <section class="module-card">
+            <div class="activity-header">
+              <div>
+                <h2 class="activity-title">Expense Insights</h2>
+                <p class="topbar-meta">Tổng hợp chi tiêu và thu nhập</p>
+              </div>
+              <button class="pill-btn btn-primary" onclick="window.location.href='/backend-ui/'">Về Overview</button>
+            </div>
+
+            <div class="module-row">
+              <div class="module-left">
+                <div class="module-icon">💰</div>
+                <div class="module-label">
+                  <p class="module-title">Chi tiêu tổng</p>
+                  <p class="module-count">{{ total_expense_amount_display }}</p>
+                </div>
+              </div>
+            </div>
+            <div class="module-row">
+              <div class="module-left">
+                <div class="module-icon">📥</div>
+                <div class="module-label">
+                  <p class="module-title">Thu nhập tổng</p>
+                  <p class="module-count">{{ total_income_amount_display }}</p>
+                </div>
+              </div>
+            </div>
+            <div class="module-row">
+              <div class="module-left">
+                <div class="module-icon">🧾</div>
+                <div class="module-label">
+                  <p class="module-title">Giao dịch</p>
+                  <p class="module-count">{{ transaction_count_display }}</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="activity-card">
+            <div class="activity-header">
+              <div>
+                <h2 class="activity-title">Expense Actions</h2>
+                <p class="topbar-meta">Điều hướng nhanh tới danh sách chi tiêu</p>
+              </div>
+            </div>
+            <div class="activity-list">
+              <div class="activity-item">
+                <p class="activity-text"><strong>Chi tiêu hôm nay</strong> đã được ghi nhận.</p>
+                <div class="activity-meta"><span>Expenses</span><span class="chip">Live</span></div>
+              </div>
+              <div class="activity-item">
+                <p class="activity-text"><strong>Budget delta</strong> được cập nhật tự động.</p>
+                <div class="activity-meta"><span>Budget</span><span class="chip">Tracking</span></div>
+              </div>
+            </div>
+          </section>
+        </div>
+      {% elif section == 'savings' %}
+        <div class="card-row">
+          <section class="module-card">
+            <div class="activity-header">
+              <div>
+                <h2 class="activity-title">Savings Overview</h2>
+                <p class="topbar-meta">Tình trạng các mục tiêu tiết kiệm</p>
+              </div>
+              <button class="pill-btn btn-primary" onclick="window.location.href='/backend-ui/'">Về Overview</button>
+            </div>
+
+            <div class="module-row">
+              <div class="module-left">
+                <div class="module-icon">🏦</div>
+                <div class="module-label">
+                  <p class="module-title">Mục tiêu tiết kiệm</p>
+                  <p class="module-count">{{ savings_goal_count }}</p>
+                </div>
+              </div>
+            </div>
+            <div class="module-row">
+              <div class="module-left">
+                <div class="module-icon">💵</div>
+                <div class="module-label">
+                  <p class="module-title">Tiết kiệm hiện tại</p>
+                  <p class="module-count">{{ total_savings_display }}</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="activity-card">
+            <div class="activity-header">
+              <div>
+                <h2 class="activity-title">Savings Actions</h2>
+                <p class="topbar-meta">Quản lý mục tiêu và tiến độ</p>
+              </div>
+            </div>
+            <div class="activity-list">
+              <div class="activity-item">
+                <p class="activity-text"><strong>Tiết kiệm mới</strong> đang được theo dõi.</p>
+                <div class="activity-meta"><span>Savings</span><span class="chip">Progress</span></div>
+              </div>
+              <div class="activity-item">
+                <p class="activity-text"><strong>Yêu cầu rút</strong> có thể được xem xét.</p>
+                <div class="activity-meta"><span>Finance</span><span class="chip">Review</span></div>
+              </div>
+            </div>
+          </section>
+        </div>
+      {% elif section == 'budgets' %}
+        <div class="card-row">
+          <section class="module-card">
+            <div class="activity-header">
+              <div>
+                <h2 class="activity-title">Budget Control</h2>
+                <p class="topbar-meta">Điều phối ngân sách theo tháng</p>
+              </div>
+              <button class="pill-btn btn-primary" onclick="window.location.href='/backend-ui/'">Về Overview</button>
+            </div>
+
+            <div class="module-row">
+              <div class="module-left">
+                <div class="module-icon">📊</div>
+                <div class="module-label">
+                  <p class="module-title">Budget count</p>
+                  <p class="module-count">{{ budget_count }}</p>
+                </div>
+              </div>
+            </div>
+            <div class="module-row">
+              <div class="module-left">
+                <div class="module-icon">💰</div>
+                <div class="module-label">
+                  <p class="module-title">Budget total</p>
+                  <p class="module-count">{{ budget_total_amount_display }}</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="activity-card">
+            <div class="activity-header">
+              <div>
+                <h2 class="activity-title">Budget Actions</h2>
+                <p class="topbar-meta">Theo dõi và điều chỉnh chi tiêu</p>
+              </div>
+            </div>
+            <div class="activity-list">
+              <div class="activity-item">
+                <p class="activity-text"><strong>Budget alerts</strong> tự động thông báo khi gần vượt.</p>
+                <div class="activity-meta"><span>Budgets</span><span class="chip">Alert</span></div>
+              </div>
+              <div class="activity-item">
+                <p class="activity-text"><strong>Tracking</strong> được bật cho tất cả danh mục.</p>
+                <div class="activity-meta"><span>Reports</span><span class="chip">Live</span></div>
+              </div>
+            </div>
+          </section>
+        </div>
+      {% elif section == 'shared-fund' %}
+        <div class="card-row">
+          <section class="module-card">
+            <div class="activity-header">
+              <div>
+                <h2 class="activity-title">Shared Fund</h2>
+                <p class="topbar-meta">Quản lý quỹ chung và lời mời</p>
+              </div>
+              <button class="pill-btn btn-primary" onclick="window.location.href='/backend-ui/'">Về Overview</button>
+            </div>
+
+            <div class="module-row">
+              <div class="module-left">
+                <div class="module-icon">🤝</div>
+                <div class="module-label">
+                  <p class="module-title">Shared funds</p>
+                  <p class="module-count">{{ shared_fund_count }}</p>
+                </div>
+              </div>
+            </div>
+            <div class="module-row">
+              <div class="module-left">
+                <div class="module-icon">✉️</div>
+                <div class="module-label">
+                  <p class="module-title">Pending invites</p>
+                  <p class="module-count">{{ pending_invites }}</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="activity-card">
+            <div class="activity-header">
+              <div>
+                <h2 class="activity-title">Shared Fund Actions</h2>
+                <p class="topbar-meta">Kiểm soát truy cập và hợp tác</p>
+              </div>
+            </div>
+            <div class="activity-list">
+              <div class="activity-item">
+                <p class="activity-text"><strong>Phiên quỹ chung</strong> đang chờ xử lý.</p>
+                <div class="activity-meta"><span>Shared Fund</span><span class="chip">Pending</span></div>
+              </div>
+              <div class="activity-item">
+                <p class="activity-text"><strong>Quyền thành viên</strong> có thể được điều chỉnh.</p>
+                <div class="activity-meta"><span>Permissions</span><span class="chip">Admin</span></div>
+              </div>
+            </div>
+          </section>
+        </div>
+      {% else %}
+        <div class="card-row">
+          <section class="module-card">
+            <div class="activity-header">
+              <div>
+                <h2 class="activity-title">Section không rõ</h2>
+                <p class="topbar-meta">Đường dẫn chưa được định nghĩa trong dashboard.</p>
+              </div>
+              <button class="pill-btn btn-primary" onclick="window.location.href='/backend-ui/'">Trở về</button>
+            </div>
+          </section>
+        </div>
+      {% endif %}
+      </div>
+
+      <div class="footer-nav">
+        <span>Expense Manager • Backend UI</span>
+        <a href="http://localhost:3003/">Quay về trang đăng nhập</a>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const clockEl = document.getElementById('realtime-clock');
+    function updateClock() {
+      const now = new Date();
+      const time = now.toLocaleTimeString('vi-VN', { hour12: false });
+      if (clockEl) clockEl.textContent = time;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    function toggleAccordion(el) {
+      const body = el.nextElementSibling;
+      if (!body) return;
+      body.classList.toggle('open');
+    }
+  </script>
+</body>
+</html>

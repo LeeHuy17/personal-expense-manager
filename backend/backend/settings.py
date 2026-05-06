@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     'corsheaders',
 
     'accounts',
+    'backend_ui',
 ]
 
 # 4. Cấu hình Middleware (CORS phải ở trên CsrfViewMiddleware)

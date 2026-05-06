@@ -10,8 +10,9 @@ from rest_framework_simplejwt.views import (
 )
 
 urlpatterns = [
-    path('', RedirectView.as_view(url='http://192.168.6.112:3000/', permanent=False)),
+    path('', RedirectView.as_view(url='/backend-ui/', permanent=False)),
     path('admin/', admin.site.urls),
+    path('backend-ui/', include('backend_ui.urls')),
     # Kết nối các URL của app accounts vào hệ thống
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
