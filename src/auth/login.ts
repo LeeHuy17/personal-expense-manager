@@ -52,11 +52,21 @@ export const handleLogin = async (e: Event) => {
             localStorage.setItem('accessToken', data.access || ''); 
             localStorage.setItem('username', data.username);
             localStorage.setItem('isLoggedIn', 'true');
-            
+            localStorage.setItem('isAdmin', data.is_staff ? 'true' : 'false');
+            localStorage.setItem('isSuperuser', data.is_superuser ? 'true' : 'false');
+
+            // Clear stale cached app data from any previous user session
+            localStorage.removeItem('transactions');
+            localStorage.removeItem('categories');
+            localStorage.removeItem('categoryBudgets');
+            localStorage.removeItem('goals');
+            localStorage.removeItem('userAvatar');
+
             console.log("✅ LocalStorage updated:", {
                 accessToken: !!data.access,
                 username: data.username,
-                isLoggedIn: localStorage.getItem('isLoggedIn')
+                isLoggedIn: localStorage.getItem('isLoggedIn'),
+                isAdmin: localStorage.getItem('isAdmin'),
             });
             
             // 2. Thông báo cho người dùng

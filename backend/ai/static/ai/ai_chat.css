@@ -77,7 +77,10 @@
   padding: 10px 12px;
   border-radius: 12px;
   font-size: 0.9rem;
-  line-height: 1.4;
+  line-height: 1.5;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
 
 .ai-message.user .ai-message-bubble {
@@ -90,6 +93,27 @@
   background: #f3efff;
   color: #1e293b;
   border-bottom-left-radius: 4px;
+}
+
+/* Hỗ trợ markdown formatting */
+.ai-message-bubble strong {
+  font-weight: 700;
+  color: #4f46e5;
+}
+
+.ai-message-bubble em {
+  font-style: italic;
+  color: #7c3aed;
+}
+
+.ai-message-bubble ul,
+.ai-message-bubble ol {
+  margin: 4px 0 4px 12px;
+  padding: 0;
+}
+
+.ai-message-bubble li {
+  margin: 2px 0;
 }
 
 .ai-card-row {

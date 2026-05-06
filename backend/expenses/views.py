@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from django.db.models import ProtectedError
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
@@ -5,6 +6,8 @@ from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
 from .models import ChiPhi, ThuNhap, Loai, Profile
 from .serializers import ChiPhiSerializer, ThuNhapSerializer, LoaiSerializer
+
+AuthUser = get_user_model()
 
 class ThuNhapViewSet(viewsets.ModelViewSet):
     serializer_class = ThuNhapSerializer
@@ -26,11 +29,47 @@ class ChiPhiViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         # Tương tự: Bảo mật tuyệt đối dữ liệu chi phí
-        return ChiPhi.objects.filter(user=self.request.user).order_by('-date')
+        user = self.request.user
+        queryset = ChiPhi.objects.filter(user=user).order_by('-date')
+        print(f"[DEBUG] ChiPhiViewSet.get_queryset() - User: {user.username}, Count: {queryset.count()}")
+        return queryset
+
+    def create(self, request, *args, **kwargs):
+        print(f"[DEBUG] ChiPhiViewSet.create() - User: {request.user.username}, Data: {request.data}")
+        try:
+            serializer = self.get_serializer(data=request.data)
+            print(f"[DEBUG] Serializer is_valid: {serializer.is_valid()}")
+            if not serializer.is_valid():
+                print(f"[DEBUG] Serializer errors: {serializer.errors}")
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            self.perform_create(serializer)
+            headers = self.get_success_headers(serializer.data)
+            print(f"[DEBUG] Successfully created ChiPhi: {serializer.data}")
+            return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        except Exception as e:
+            print(f"[DEBUG] Error creating ChiPhi: {e}")
+            import traceback
+            print(f"[DEBUG] Traceback: {traceback.format_exc()}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def perform_create(self, serializer):
         # Tự động gán User khi lưu khoản chi mới
         serializer.save(user=self.request.user)
+
+    def destroy(self, request, *args, **kwargs):
+        print(f"[DEBUG] ChiPhiViewSet.destroy() - User: {request.user.username}, PK: {kwargs.get('pk')}")
+        try:
+            instance = self.get_object()
+            print(f"[DEBUG] Found ChiPhi instance: ID={instance.chiPhiId}, User={instance.user.username}")
+            self.perform_destroy(instance)
+            print(f"[DEBUG] Successfully deleted ChiPhi ID={instance.chiPhiId}")
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except ChiPhi.DoesNotExist:
+            print(f"[DEBUG] ChiPhi with PK={kwargs.get('pk')} not found for user {request.user.username}")
+            return Response({"error": "Transaction not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            print(f"[DEBUG] Error deleting ChiPhi: {e}")
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 class LoaiViewSet(viewsets.ModelViewSet):
     queryset = Loai.objects.all()
@@ -79,3 +118,65 @@ class UserProfileView(APIView):
                 "avatar_url": avatar_url,
             }, status=200)
         return Response({"error": "Không có file"}, status=400)
+
+
+class AdminCategoryListView(APIView):
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def get(self, request):
+        user_id = request.query_params.get('user_id')
+        categories = Loai.objects.all().order_by('user__username', 'tenLoai')
+        if user_id:
+            categories = categories.filter(user__id=user_id)
+
+        data = []
+        for category in categories:
+            data.append({
+                'id': category.loaiId,
+                'name': category.tenLoai,
+                'type': category.type,
+                'icon': category.icon,
+                'color': category.color,
+                'user_id': category.user.id if category.user else None,
+                'username': category.user.username if category.user else 'Không rõ',
+                'expense_count': ChiPhi.objects.filter(loai=category).count(),
+                'income_count': ThuNhap.objects.filter(loai=category).count(),
+            })
+
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class AdminCategoryDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def patch(self, request, category_id):
+        category = Loai.objects.filter(loaiId=category_id).first()
+        if not category:
+            return Response({'error': 'Danh mục không tồn tại.'}, status=status.HTTP_404_NOT_FOUND)
+
+        category.tenLoai = request.data.get('name', category.tenLoai)
+        category.type = request.data.get('type', category.type)
+        category.icon = request.data.get('icon', category.icon)
+        category.color = request.data.get('color', category.color)
+        category.save()
+
+        return Response({
+            'id': category.loaiId,
+            'name': category.tenLoai,
+            'type': category.type,
+            'icon': category.icon,
+            'color': category.color,
+            'user_id': category.user.id if category.user else None,
+            'username': category.user.username if category.user else 'Không rõ',
+        }, status=status.HTTP_200_OK)
+
+    def delete(self, request, category_id):
+        category = Loai.objects.filter(loaiId=category_id).first()
+        if not category:
+            return Response({'error': 'Danh mục không tồn tại.'}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            category.delete()
+            return Response({'message': 'Danh mục đã được xóa.'}, status=status.HTTP_200_OK)
+        except ProtectedError:
+            return Response({'error': 'Không thể xóa danh mục đã có giao dịch liên quan.'}, status=status.HTTP_400_BAD_REQUEST)

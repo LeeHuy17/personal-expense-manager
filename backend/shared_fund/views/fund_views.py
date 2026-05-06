@@ -3,6 +3,7 @@ from rest_framework import viewsets, permissions, serializers, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from shared_fund.models import SharedFund, FundMember, FundInvitation
 from shared_fund.serializers.fund_serializer import SharedFundSerializer
 from shared_fund.serializers.invitation_serializer import FundInvitationSerializer
@@ -23,7 +24,7 @@ class SharedFundViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return SharedFund.objects.filter(members__user=self.request.user).distinct()
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer):   
         fund = serializer.save(owner=self.request.user)
         FundMember.objects.create(fund=fund, user=self.request.user, role=FundMember.ROLE_OWNER)
 
@@ -33,8 +34,14 @@ class SharedFundViewSet(viewsets.ModelViewSet):
         if fund.owner != request.user:
             raise PermissionDenied('Chỉ owner mới được mời thành viên.')
 
+        # --- BẮT ĐẦU DEBUG ---
+        print("📥 Dữ liệu gửi từ Frontend:", request.data)
+        
         serializer = InviteMemberSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        
+        if not serializer.is_valid():
+            print("❌ LỖI VALIDATION CHI TIẾT:", serializer.errors)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         target_user = serializer.validated_data['user']
         role = serializer.validated_data['role']
 
@@ -69,3 +76,57 @@ class SharedFundViewSet(viewsets.ModelViewSet):
 
         plan = calculate_settlement_plan(fund)
         return Response(plan)
+
+
+class AdminSharedFundListView(APIView):
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def get(self, request):
+        owner_id = request.query_params.get('owner_id')
+        funds = SharedFund.objects.all().order_by('owner__username', 'name')
+        if owner_id:
+            funds = funds.filter(owner__id=owner_id)
+
+        data = [
+            {
+                'id': fund.id,
+                'name': fund.name,
+                'description': fund.description,
+                'owner': fund.owner.username,
+                'member_count': fund.members.count(),
+                'created_at': fund.created_at.isoformat(),
+                'updated_at': fund.updated_at.isoformat(),
+            }
+            for fund in funds
+        ]
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class AdminSharedFundDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def patch(self, request, fund_id):
+        fund = SharedFund.objects.filter(id=fund_id).first()
+        if not fund:
+            return Response({'error': 'Quỹ chung không tồn tại.'}, status=status.HTTP_404_NOT_FOUND)
+
+        fund.name = request.data.get('name', fund.name)
+        fund.description = request.data.get('description', fund.description)
+        fund.save()
+
+        return Response({
+            'id': fund.id,
+            'name': fund.name,
+            'description': fund.description,
+            'owner': fund.owner.username,
+            'member_count': fund.members.count(),
+            'created_at': fund.created_at.isoformat(),
+            'updated_at': fund.updated_at.isoformat(),
+        }, status=status.HTTP_200_OK)
+
+    def delete(self, request, fund_id):
+        fund = SharedFund.objects.filter(id=fund_id).first()
+        if not fund:
+            return Response({'error': 'Quỹ chung không tồn tại.'}, status=status.HTTP_404_NOT_FOUND)
+        fund.delete()
+        return Response({'message': 'Quỹ chung đã được xóa.'}, status=status.HTTP_200_OK)

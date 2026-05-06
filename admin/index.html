@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin | Chi Tiêu JQKA</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body class="bg-[#FFF7ED] font-sans text-slate-900 antialiased transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100">
+    <div class="min-h-screen py-10 px-4 sm:px-6 lg:px-8">
+      <div class="max-w-6xl mx-auto space-y-8">
+        <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <p class="text-xs uppercase tracking-[0.3em] text-orange-600 font-black mb-2">Admin</p>
+            <h1 class="text-3xl font-black text-slate-900 dark:text-white">Quản lý người dùng & danh mục</h1>
+            <p class="mt-3 text-sm text-slate-500 dark:text-slate-400">Trang admin riêng để xem, sửa và quản lý danh mục cho từng user trong ứng dụng.</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-3">
+            <a href="/" class="inline-flex items-center gap-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-orange-50 dark:hover:bg-slate-800 transition">
+              <i data-lucide="arrow-left" class="w-4 h-4"></i>
+              Về trang chính
+            </a>
+            <button id="admin-refresh-users-btn" class="inline-flex items-center gap-2 rounded-2xl bg-orange-600 px-4 py-3 text-sm font-semibold text-white hover:bg-orange-700 transition">
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+              Tải lại user
+            </button>
+            <button id="admin-refresh-categories-btn" class="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 transition">
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+              Tải lại danh mục
+            </button>
+          </div>
+        </header>
+
+        <div class="flex flex-wrap items-center justify-between gap-4 rounded-[2rem] bg-slate-50 dark:bg-slate-950 p-4">
+          <div class="inline-flex rounded-full bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+            <button id="admin-tab-users" class="px-5 py-3 text-sm font-semibold text-slate-900 dark:text-white bg-white dark:bg-slate-900">Người dùng</button>
+            <button id="admin-tab-categories" class="px-5 py-3 text-sm font-semibold text-slate-500 dark:text-slate-400">Danh mục</button>
+            <button id="admin-tab-funds" class="px-5 py-3 text-sm font-semibold text-slate-500 dark:text-slate-400">Quỹ chung</button>
+          </div>
+          <p class="text-sm text-slate-500 dark:text-slate-400">Chuyển giữa danh sách user và quản lý danh mục của từng user.</p>
+        </div>
+
+        <main class="bg-white dark:bg-slate-900 rounded-[2rem] border border-orange-50 dark:border-slate-800 shadow-lg p-6">
+          <div id="admin-message" class="rounded-3xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-5 text-sm text-slate-600 dark:text-slate-300 hidden"></div>
+
+          <section id="admin-users-section">
+            <div class="overflow-x-auto mt-4">
+              <table class="min-w-full text-left text-sm text-slate-700 dark:text-slate-200 border-collapse">
+                <thead>
+                  <tr class="bg-slate-50 dark:bg-slate-800 text-slate-500 uppercase text-[10px] tracking-[0.3em]">
+                    <th class="px-4 py-3">ID</th>
+                    <th class="px-4 py-3">Tên</th>
+                    <th class="px-4 py-3">Email</th>
+                    <th class="px-4 py-3">Active</th>
+                    <th class="px-4 py-3">Admin</th>
+                    <th class="px-4 py-3">Đăng ký</th>
+                    <th class="px-4 py-3">Hoạt động</th>
+                    <th class="px-4 py-3">Hành động</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-users-table-body"></tbody>
+              </table>
+            </div>
+            <p id="admin-users-empty" class="hidden mt-5 text-sm text-slate-400 italic">Không có người dùng nào.</p>
+            <p id="admin-users-error" class="hidden mt-5 text-sm text-rose-500"></p>
+          </section>
+
+          <section id="admin-categories-section" class="hidden">
+            <div class="grid sm:grid-cols-[1fr_auto] gap-4 items-end mt-4">
+              <div class="space-y-2">
+                <label for="admin-user-filter" class="text-xs uppercase tracking-[0.3em] text-slate-400 font-black">Lọc theo người dùng</label>
+                <select id="admin-user-filter" class="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-4 py-3 text-sm text-slate-800 dark:text-slate-100">
+                  <option value="">Tất cả người dùng</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="overflow-x-auto mt-4">
+              <table class="min-w-full text-left text-sm text-slate-700 dark:text-slate-200 border-collapse">
+                <thead>
+                  <tr class="bg-slate-50 dark:bg-slate-800 text-slate-500 uppercase text-[10px] tracking-[0.3em]">
+                    <th class="px-4 py-3">ID</th>
+                    <th class="px-4 py-3">Người dùng</th>
+                    <th class="px-4 py-3">Tên danh mục</th>
+                    <th class="px-4 py-3">Loại</th>
+                    <th class="px-4 py-3">Chi phí</th>
+                    <th class="px-4 py-3">Thu nhập</th>
+                    <th class="px-4 py-3">Hành động</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-categories-table-body"></tbody>
+              </table>
+            </div>
+            <p id="admin-categories-empty" class="hidden mt-5 text-sm text-slate-400 italic">Không có danh mục nào.</p>
+            <p id="admin-categories-error" class="hidden mt-5 text-sm text-rose-500"></p>
+          </section>
+
+          <section id="admin-funds-section" class="hidden">
+            <div class="grid sm:grid-cols-[1fr_auto] gap-4 items-end mt-4">
+              <div class="space-y-2">
+                <label for="admin-fund-owner-filter" class="text-xs uppercase tracking-[0.3em] text-slate-400 font-black">Lọc theo chủ quỹ</label>
+                <select id="admin-fund-owner-filter" class="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-4 py-3 text-sm text-slate-800 dark:text-slate-100">
+                  <option value="">Tất cả người dùng</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="overflow-x-auto mt-4">
+              <table class="min-w-full text-left text-sm text-slate-700 dark:text-slate-200 border-collapse">
+                <thead>
+                  <tr class="bg-slate-50 dark:bg-slate-800 text-slate-500 uppercase text-[10px] tracking-[0.3em]">
+                    <th class="px-4 py-3">ID</th>
+                    <th class="px-4 py-3">Tên quỹ</th>
+                    <th class="px-4 py-3">Chủ</th>
+                    <th class="px-4 py-3">Số thành viên</th>
+                    <th class="px-4 py-3">Tạo lúc</th>
+                    <th class="px-4 py-3">Hành động</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-funds-table-body"></tbody>
+              </table>
+            </div>
+            <p id="admin-funds-empty" class="hidden mt-5 text-sm text-slate-400 italic">Không có quỹ chung nào.</p>
+            <p id="admin-funds-error" class="hidden mt-5 text-sm text-rose-500"></p>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <div id="toast-container" class="fixed bottom-5 right-5 z-[100] flex flex-col gap-3"></div>
+    <script type="module" src="/src/admin.ts"></script>
+  </body>
+</html>
