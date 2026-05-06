@@ -23,6 +23,7 @@ class ThuNhapViewSet(viewsets.ModelViewSet):
 class ChiPhiViewSet(viewsets.ModelViewSet):
     serializer_class = ChiPhiSerializer
     permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'chiPhiId'
 
     def get_queryset(self):
         # Tương tự: Bảo mật tuyệt đối dữ liệu chi phí
@@ -54,7 +55,7 @@ class ChiPhiViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
     def destroy(self, request, *args, **kwargs):
-        print(f"[DEBUG] ChiPhiViewSet.destroy() - User: {request.user.username}, PK: {kwargs.get('pk')}")
+        print(f"[DEBUG] ChiPhiViewSet.destroy() - User: {request.user.username}, chiPhiId: {kwargs.get('chiPhiId') or kwargs.get('pk')}")
         try:
             instance = self.get_object()
             print(f"[DEBUG] Found ChiPhi instance: ID={instance.chiPhiId}, User={instance.user.username}")

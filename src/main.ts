@@ -226,6 +226,59 @@ async function handleAddGoal(): Promise<boolean> {
 (window as any).createSavingsGoal = createSavingsGoal;
 (window as any).handleAddGoal = handleAddGoal;
 
+// Budget functions
+async function fetchExpenseCategories() {
+    try {
+        const response = await authFetch('/budgets/expense_categories/', {
+            method: 'GET'
+        });
+        const data = await response.json();
+        
+        // Giả sử bạn có một thẻ <select id="budget-category">
+        const selectElement = document.getElementById('budget-category') as HTMLSelectElement;
+        selectElement.innerHTML = '<option value="">Chọn danh mục</option>';
+        
+        data.forEach((cat: { id: number, name: string }) => {
+            const option = document.createElement('option');
+            option.value = cat.id.toString();
+            option.textContent = cat.name;
+            selectElement.appendChild(option);
+        });
+    } catch (error) {
+        console.error("Lỗi khi tải danh mục chi:", error);
+    }
+}
+
+async function saveBudget(categoryId: number, amount: number, month: number, year: number) {
+    const payload = {
+        category: categoryId,
+        amount: amount,
+        month: month,
+        year: year
+    };
+
+    try {
+        const response = await authFetch('/budgets/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+            alert("Đã thiết lập ngân sách thành công!");
+            // Đóng modal và tải lại danh sách
+            if (window.expenseManager) {
+                await window.expenseManager.loadBudgets();
+            }
+        } else {
+            const errData = await response.json();
+            alert("Lỗi: " + JSON.stringify(errData));
+        }
+    } catch (error) {
+        console.error("Lỗi server:", error);
+    }
+}
+
 function updateSharedFundLinks() {
     const links = document.querySelectorAll<HTMLAnchorElement>('a[data-shared-fund-link]');
     links.forEach((link) => {
@@ -2849,28 +2902,31 @@ class ExpenseManager {
   }
 
   private setupBudgetEvents() {
-    document.getElementById('manage-budget-btn')?.addEventListener('click', () => {
+    document.getElementById('manage-budget-btn')?.addEventListener('click', async () => {
       this.budgetModal.classList.remove('hidden');
-      this.populateBudgetCategorySelect();
+      await fetchExpenseCategories();
+      // Set default month and year
+      const now = new Date();
+      (document.getElementById('budget-month') as HTMLSelectElement).value = (now.getMonth() + 1).toString();
+      (document.getElementById('budget-year') as HTMLInputElement).value = now.getFullYear().toString();
     });
 
     document.getElementById('close-budget-modal')?.addEventListener('click', () => {
       this.budgetModal.classList.add('hidden');
     });
 
-    this.budgetForm.addEventListener('submit', (e) => {
+    this.budgetForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const category = (document.getElementById('budget-category') as HTMLSelectElement).value;
+      const categoryId = parseInt((document.getElementById('budget-category') as HTMLSelectElement).value);
       const amountStr = (document.getElementById('budget-amount') as HTMLInputElement).value;
       const amount = parseInt(amountStr.replace(/\D/g, '')) || 0;
+      const month = parseInt((document.getElementById('budget-month') as HTMLSelectElement).value);
+      const year = parseInt((document.getElementById('budget-year') as HTMLInputElement).value);
 
-      if (amount > 0) {
-        this.categoryBudgets[category] = amount;
-        this.saveData();
-        this.render();
+      if (amount > 0 && categoryId) {
+        await saveBudget(categoryId, amount, month, year);
         this.budgetModal.classList.add('hidden');
         this.budgetForm.reset();
-        this.showToast(`Đã thiết lập ngân sách cho ${category}`, 'success');
       }
     });
 
@@ -2990,7 +3046,7 @@ class ExpenseManager {
     this.renderTrendChart();
     this.renderGoals();
     this.renderBudget();
-    this.renderCategoryBudgets();
+    this.loadBudgets(); // Load budgets from API instead of local
     if (!skipAlerts) {
       this.checkBudgets();
     }
@@ -3018,46 +3074,59 @@ class ExpenseManager {
     });
   }
 
-  private renderCategoryBudgets() {
-    if (!this.budgetListEl) return;
-    
-    const currentMonth = new Date().getMonth();
-    const currentYear = new Date().getFullYear();
-    const budgetEntries = Object.entries(this.categoryBudgets);
+  private async loadBudgets() {
+    try {
+        const response = await authFetch('/budgets/', { method: 'GET' });
+        const budgets = await response.json();
 
-    if (budgetEntries.length === 0) {
-      this.budgetListEl.innerHTML = `
-        <div class="py-4 text-center text-slate-400 text-xs font-medium">Chưa có ngân sách nào được thiết lập</div>
-      `;
-      return;
+        if (!this.budgetListEl) return;
+        
+        this.budgetListEl.innerHTML = ''; // Xóa nội dung cũ
+
+        if (budgets.length === 0) {
+            this.budgetListEl.innerHTML = `
+                <div class="py-4 text-center text-slate-400 text-xs font-medium">Chưa có ngân sách nào được thiết lập</div>
+            `;
+            return;
+        }
+
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
+
+        budgets.forEach((b: any) => {
+            const spent = this.transactions
+                .filter(t => {
+                    const d = new Date(t.date);
+                    return t.type === 'expense' && t.category_name === b.category_name && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+                })
+                .reduce((sum, t) => sum + t.amount, 0);
+            
+            const percent = Math.min((spent / b.amount) * 100, 100);
+            const colorClass = percent > 90 ? 'bg-rose-500' : percent > 70 ? 'bg-orange-500' : 'bg-emerald-500';
+
+            this.budgetListEl.innerHTML += `
+                <div class="space-y-2">
+                    <div class="flex justify-between items-end">
+                        <div>
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">${b.category_name}</p>
+                            <p class="text-[10px] font-medium text-slate-400">Đã dùng ${this.formatCurrency(spent)} / ${this.formatCurrency(b.amount)}</p>
+                        </div>
+                        <p class="text-xs font-black ${percent > 90 ? 'text-rose-500' : 'text-slate-900 dark:text-white'}">${Math.round(percent)}%</p>
+                    </div>
+                    <div class="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <div class="h-full ${colorClass} transition-all duration-1000" style="width: ${percent}%"></div>
+                    </div>
+                </div>
+            `;
+        });
+    } catch (error) {
+        console.error("Lỗi tải ngân sách:", error);
+        if (this.budgetListEl) {
+            this.budgetListEl.innerHTML = `
+                <div class="py-4 text-center text-rose-400 text-xs font-medium">Lỗi tải ngân sách</div>
+            `;
+        }
     }
-
-    this.budgetListEl.innerHTML = budgetEntries.map(([category, amount]) => {
-      const spent = this.transactions
-        .filter(t => {
-          const d = new Date(t.date);
-          return t.type === 'expense' && t.category_name === category && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-        })
-        .reduce((sum, t) => sum + t.amount, 0);
-      
-      const percent = Math.min((spent / amount) * 100, 100);
-      const colorClass = percent > 90 ? 'bg-rose-500' : percent > 70 ? 'bg-orange-500' : 'bg-emerald-500';
-
-      return `
-        <div class="space-y-2">
-          <div class="flex justify-between items-end">
-            <div>
-              <p class="text-sm font-bold text-slate-900 dark:text-white">${category}</p>
-              <p class="text-[10px] font-medium text-slate-400">Đã dùng ${this.formatCurrency(spent)} / ${this.formatCurrency(amount)}</p>
-            </div>
-            <p class="text-xs font-black ${percent > 90 ? 'text-rose-500' : 'text-slate-900 dark:text-white'}">${Math.round((spent / amount) * 100)}%</p>
-          </div>
-          <div class="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-            <div class="h-full ${colorClass} transition-all duration-1000" style="width: ${percent}%"></div>
-          </div>
-        </div>
-      `;
-    }).join('');
   }
 
   private getCurrentBalance(): number {
