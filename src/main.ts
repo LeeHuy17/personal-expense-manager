@@ -1613,6 +1613,8 @@ class ExpenseManager {
     { id: 'default-7', name: 'Khác', icon: 'plus', color: '#64748b', type: 'Chi tiêu' }
   ];
   private categoryBudgets: Record<string, number> = {};
+  private categoryLookup: Record<string, Category> = {};
+  private currentCategoryFilter: string = 'all';
   private goals: Goal[] = [];
   private monthlyBudget: number = 10000000; // Default 10M VND
   private isDarkMode: boolean = false;
@@ -3227,55 +3229,69 @@ class ExpenseManager {
     });
   }
 
-  private async loadBudgets() {
+  public async loadBudgets() {
     try {
-        const response = await authFetch('/budgets/', { method: 'GET' });
-        const budgets = await response.json();
+      const response = await authFetch('/budgets/', { method: 'GET' });
+      const budgets = await response.json();
 
-        if (!this.budgetListEl) return;
-        
-        this.budgetListEl.innerHTML = ''; // Xóa nội dung cũ
+      if (!this.budgetListEl) return;
+      this.budgetListEl.innerHTML = ''; // Xóa nội dung cũ
 
-        if (budgets.length === 0) {
-            this.budgetListEl.innerHTML = `
-                <div class="py-4 text-center text-slate-400 text-xs font-medium">Chưa có ngân sách nào được thiết lập</div>
-            `;
-            return;
-        }
+      if (!Array.isArray(budgets) || budgets.length === 0) {
+        this.budgetListEl.innerHTML = `
+          <div class="py-4 text-center text-slate-400 text-xs font-medium">Chưa có ngân sách nào được thiết lập</div>
+        `;
+        this.categoryBudgets = {};
+        return;
+      }
 
-    this.budgetListEl.innerHTML = budgetEntries.map(([category, amount]) => {
-      const spent = this.transactions
-        .filter(t => {
-          const d = new Date(t.date);
-          return t.type === 'expense' && t.category_name === category && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-        })
-        .reduce((sum, t) => sum + t.amount, 0);
-      
-      const percent = Math.min((spent / amount) * 100, 100);
-      const colorClass = percent > 90 ? 'bg-rose-500' : percent > 70 ? 'bg-orange-500' : 'bg-emerald-500';
+      const currentMonth = new Date().getMonth() + 1; // month field is 1-based
+      const currentYear = new Date().getFullYear();
+      this.categoryBudgets = {};
 
-            this.budgetListEl.innerHTML += `
-                <div class="space-y-2">
-                    <div class="flex justify-between items-end">
-                        <div>
-                            <p class="text-sm font-bold text-slate-900 dark:text-white">${b.category_name}</p>
-                            <p class="text-[10px] font-medium text-slate-400">Đã dùng ${this.formatCurrency(spent)} / ${this.formatCurrency(b.amount)}</p>
-                        </div>
-                        <p class="text-xs font-black ${percent > 90 ? 'text-rose-500' : 'text-slate-900 dark:text-white'}">${Math.round(percent)}%</p>
-                    </div>
-                    <div class="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                        <div class="h-full ${colorClass} transition-all duration-1000" style="width: ${percent}%"></div>
-                    </div>
-                </div>
-            `;
-        });
+      budgets.forEach((b: any) => {
+        const categoryName = b.category_name || b.category?.tenLoai || b.category?.name;
+        const amount = typeof b.amount === 'number' ? b.amount : parseFloat(String(b.amount));
+        const month = Number(b.month);
+        const year = Number(b.year);
+
+        if (!categoryName || isNaN(amount) || amount <= 0) return;
+        if (isNaN(month) || isNaN(year) || month !== currentMonth || year !== currentYear) return;
+
+        this.categoryBudgets[categoryName] = amount;
+
+        const spent = this.transactions
+          .filter(t => {
+            const d = new Date(t.date);
+            return t.type === 'expense' && t.category_name === categoryName && d.getMonth() + 1 === currentMonth && d.getFullYear() === currentYear;
+          })
+          .reduce((sum, t) => sum + t.amount, 0);
+
+        const percent = Math.min((spent / b.amount) * 100, 100);
+        const colorClass = percent > 90 ? 'bg-rose-500' : percent > 70 ? 'bg-orange-500' : 'bg-emerald-500';
+
+        this.budgetListEl.innerHTML += `
+          <div class="space-y-2">
+            <div class="flex justify-between items-end">
+              <div>
+                <p class="text-sm font-bold text-slate-900 dark:text-white">${b.category_name}</p>
+                <p class="text-[10px] font-medium text-slate-400">Đã dùng ${this.formatCurrency(spent)} / ${this.formatCurrency(b.amount)}</p>
+              </div>
+              <p class="text-xs font-black ${percent > 90 ? 'text-rose-500' : 'text-slate-900 dark:text-white'}">${Math.round(percent)}%</p>
+            </div>
+            <div class="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+              <div class="h-full ${colorClass} transition-all duration-1000" style="width: ${percent}%"></div>
+            </div>
+          </div>
+        `;
+      });
     } catch (error) {
-        console.error("Lỗi tải ngân sách:", error);
-        if (this.budgetListEl) {
-            this.budgetListEl.innerHTML = `
-                <div class="py-4 text-center text-rose-400 text-xs font-medium">Lỗi tải ngân sách</div>
-            `;
-        }
+      console.error("Lỗi tải ngân sách:", error);
+      if (this.budgetListEl) {
+        this.budgetListEl.innerHTML = `
+          <div class="py-4 text-center text-rose-400 text-xs font-medium">Lỗi tải ngân sách</div>
+        `;
+      }
     }
   }
 
