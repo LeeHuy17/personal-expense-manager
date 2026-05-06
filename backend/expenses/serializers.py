@@ -4,13 +4,15 @@ from .models import ChiPhi, ThuNhap, Loai
 
 # Serializer cho Module Chi tiêu (Module chính)
 class ChiPhiSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(source='pk', read_only=True)
+
     class Meta:
         model = ChiPhi
         # Sử dụng danh sách fields cụ thể thay vì '__all__' để dễ kiểm soát
-        fields = ['chiPhiId', 'amount', 'date', 'moTa', 'loai', 'user']
+        fields = ['id', 'chiPhiId', 'amount', 'date', 'moTa', 'loai', 'user']
         
         # QUAN TRỌNG: Chặn Frontend tự gửi userId để tránh User A lưu chi phí cho User B
-        read_only_fields = ['user', 'chiPhiId']
+        read_only_fields = ['user', 'chiPhiId', 'id']
 
     # 1. Validation số tiền chi phí > 0
     def validate_amount(self, value):

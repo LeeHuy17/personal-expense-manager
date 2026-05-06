@@ -16,7 +16,269 @@ import { showForgotTab, showLoginTab, showResetTab } from './auth/ui-logic';
 import { createPaginationManager, createPaginationControls } from './features/pagination';
 
 const backendOrigin = (import.meta.env.VITE_BACKEND_URL as string) || (import.meta.env.VITE_API_BASE as string) || 'http://127.0.0.1:8000';
-const sharedFundApiBase = `${backendOrigin.replace(/\/$/, '')}/api/shared-fund/`;
+const API_BASE_URL = `${backendOrigin.replace(/\/$/, '')}/api`;
+const sharedFundApiBase = `${API_BASE_URL}/shared-fund/`;
+
+function buildAuthHeaders(options: RequestInit = {}) {
+  let existingHeaders: Record<string, string> = {};
+
+  if (options.headers instanceof Headers) {
+    options.headers.forEach((value, key) => {
+      existingHeaders[key] = value;
+    });
+  } else if (Array.isArray(options.headers)) {
+    options.headers.forEach(([key, value]) => {
+      existingHeaders[key] = String(value);
+    });
+  } else if (options.headers && typeof options.headers === 'object') {
+    existingHeaders = { ...(options.headers as Record<string, string>) };
+  }
+
+  const token = localStorage.getItem('accessToken') || '';
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    ...existingHeaders,
+  };
+
+  if (options.body !== undefined && !headers['Content-Type'] && !headers['content-type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  if (token) {
+    headers['Authorization'] = token.startsWith('Token ') || token.startsWith('Bearer ')
+      ? token
+      : `Token ${token}`;
+  }
+
+  return headers;
+}
+
+async function authFetch(url: string, options: RequestInit = {}) {
+  const isAbsoluteUrl = /^https?:\/\//i.test(url);
+  const requestUrl = isAbsoluteUrl ? url : `${API_BASE_URL}${url}`;
+
+  const response = await fetch(requestUrl, {
+    credentials: 'include',
+    ...options,
+    headers: buildAuthHeaders(options),
+  });
+
+  if (response.status === 401) {
+    console.warn('Token hết hạn hoặc không hợp lệ');
+    // TODO: redirect về trang đăng nhập hoặc gọi API refresh token nếu cần
+  }
+
+  return response;
+}
+
+function normalizeServerGoals(goals: any[]): Goal[] {
+  return goals.map((goal) => ({
+    id: String(goal.id ?? goal.uuid ?? Math.random().toString(36).slice(2, 10)),
+    name: goal.title || goal.name || 'Không có tên mục tiêu',
+    target: Number(goal.target_amount ?? goal.target ?? 0),
+    current: Number(goal.current_amount ?? goal.current ?? goal.saved ?? 0),
+    deadline: goal.deadline || goal.due_date || '',
+  }));
+}
+
+function renderSavingsGoals(goals: any[]): void {
+  const normalizedGoals = normalizeServerGoals(Array.isArray(goals) ? goals : []);
+  const expenseManager = (window as any).expenseManager;
+
+  if (expenseManager && typeof expenseManager.renderGoals === 'function') {
+    expenseManager.goals = normalizedGoals;
+    expenseManager.renderGoals();
+    return;
+  }
+
+  const container = document.getElementById('goals-list');
+  if (!container) {
+    console.error("Không tìm thấy thẻ có ID 'goals-list' trong HTML");
+    return;
+  }
+
+  container.innerHTML = '';
+
+  if (!normalizedGoals.length) {
+    container.innerHTML = '<p class="text-xs text-slate-400 italic">Chưa có mục tiêu nào.</p>';
+    return;
+  }
+
+  normalizedGoals.forEach(goal => {
+    const goalCard = document.createElement('div');
+    goalCard.className = 'p-4 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-transparent hover:border-orange-200 dark:hover:border-orange-900/30 transition-all';
+    goalCard.innerHTML = `
+      <div class="flex justify-between items-start mb-3">
+        <div>
+          <h4 class="text-sm font-bold text-slate-900 dark:text-white">${goal.name}</h4>
+          <p class="text-[10px] font-medium text-slate-400">Hạn: ${goal.deadline ? new Date(goal.deadline).toLocaleDateString('vi-VN') : 'Chưa có'}</p>
+        </div>
+        <button class="p-2 bg-white dark:bg-slate-900 text-orange-600 rounded-xl shadow-sm hover:shadow-md hover:scale-110 transition-all" onclick="window.handleOpenServerGoalContribute && window.handleOpenServerGoalContribute('${goal.id}')">
+          <i data-lucide="piggy-bank" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <div class="space-y-2">
+        <div class="h-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+          <div class="h-full bg-gradient-to-r from-orange-400 to-orange-600" style="width: ${goal.target ? Math.min(Math.round((goal.current / goal.target) * 100), 100) : 0}%;"></div>
+        </div>
+        <div class="flex justify-between text-[10px] font-black">
+          <div class="flex flex-col">
+            <span class="text-orange-600">${goal.target ? Math.min(Math.round((goal.current / goal.target) * 100), 100) : 0}%</span>
+            <span class="text-slate-400 font-medium">Đã đạt</span>
+          </div>
+          <div class="flex flex-col items-end">
+            <span class="text-slate-900 dark:text-white">${new Intl.NumberFormat('vi-VN').format(goal.target)} đ</span>
+            <span class="text-slate-400 font-medium">Mục tiêu</span>
+          </div>
+        </div>
+      </div>
+    `;
+    container.appendChild(goalCard);
+  });
+  if (typeof createIcons === 'function' && icons) {
+    createIcons({ icons });
+  }
+}
+
+async function loadSavingsGoals(): Promise<void> {
+  try {
+    const response = await authFetch('/savings/goals/');
+    if (!response.ok) throw new Error('Không thể tải dữ liệu mục tiêu tiết kiệm.');
+
+    const data = await response.json();
+    console.log('Dữ liệu mục tiêu:', data);
+    renderSavingsGoals(data);
+  } catch (error) {
+    console.error('Lỗi khi tải dữ liệu:', error);
+  }
+}
+
+window.handleOpenServerGoalContribute = (goalId: string) => {
+  const expenseManager = (window as any).expenseManager;
+  if (expenseManager && typeof expenseManager.openContributeModal === 'function') {
+    return expenseManager.openContributeModal(goalId);
+  }
+  console.warn('Không thể mở modal góp quỹ; expenseManager chưa sẵn sàng');
+};
+
+async function createSavingsGoal(title: string, targetAmount: number, deadline: string): Promise<boolean> {
+  try {
+    const payload = {
+      title,
+      target_amount: targetAmount,
+      deadline,
+    };
+
+    const response = await authFetch('/savings/goals/', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    if (response.ok) {
+      console.log('Thêm mục tiêu thành công!');
+      await loadSavingsGoals();
+      return true;
+    }
+
+    const err = await response.json().catch(() => ({ detail: 'Không xác định' }));
+    console.error('Lỗi thêm mục tiêu:', err);
+    return false;
+  } catch (error) {
+    console.error('Lỗi khi tạo mục tiêu tiết kiệm:', error);
+    return false;
+  }
+}
+
+async function handleAddGoal(): Promise<boolean> {
+  const titleInput = document.getElementById('goal-name') as HTMLInputElement | null;
+  const targetInput = document.getElementById('goal-target') as HTMLInputElement | null;
+  const deadlineInput = document.getElementById('goal-deadline') as HTMLInputElement | null;
+
+  if (!titleInput || !targetInput || !deadlineInput) {
+    console.error('Không tìm thấy form tạo mục tiêu');
+    return false;
+  }
+
+  const title = titleInput.value.trim();
+  const targetAmount = Number(targetInput.value.replace(/\D/g, ''));
+  const deadline = deadlineInput.value;
+
+  if (!title || !targetAmount || !deadline) {
+    console.warn('Dữ liệu mục tiêu không hợp lệ', { title, targetAmount, deadline });
+    return false;
+  }
+
+  const success = await createSavingsGoal(title, targetAmount, deadline);
+  if (success) {
+    const goalModal = document.getElementById('goal-modal');
+    if (goalModal) goalModal.classList.add('hidden');
+    const overlay = document.getElementById('modal-overlay');
+    if (overlay) {
+      overlay.classList.remove('flex');
+      overlay.classList.add('hidden');
+    }
+    return true;
+  }
+  return false;
+}
+
+// Cho phép gọi các hàm savings từ window nếu cần
+(window as any).loadSavingsGoals = loadSavingsGoals;
+(window as any).createSavingsGoal = createSavingsGoal;
+(window as any).handleAddGoal = handleAddGoal;
+
+// Budget functions
+async function fetchExpenseCategories() {
+    try {
+        const response = await authFetch('/budgets/expense_categories/', {
+            method: 'GET'
+        });
+        const data = await response.json();
+        
+        // Giả sử bạn có một thẻ <select id="budget-category">
+        const selectElement = document.getElementById('budget-category') as HTMLSelectElement;
+        selectElement.innerHTML = '<option value="">Chọn danh mục</option>';
+        
+        data.forEach((cat: { id: number, name: string }) => {
+            const option = document.createElement('option');
+            option.value = cat.id.toString();
+            option.textContent = cat.name;
+            selectElement.appendChild(option);
+        });
+    } catch (error) {
+        console.error("Lỗi khi tải danh mục chi:", error);
+    }
+}
+
+async function saveBudget(categoryId: number, amount: number, month: number, year: number) {
+    const payload = {
+        category: categoryId,
+        amount: amount,
+        month: month,
+        year: year
+    };
+
+    try {
+        const response = await authFetch('/budgets/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+            alert("Đã thiết lập ngân sách thành công!");
+            // Đóng modal và tải lại danh sách
+            if (window.expenseManager) {
+                await window.expenseManager.loadBudgets();
+            }
+        } else {
+            const errData = await response.json();
+            alert("Lỗi: " + JSON.stringify(errData));
+        }
+    } catch (error) {
+        console.error("Lỗi server:", error);
+    }
+}
 
 function updateSharedFundLinks() {
     const links = document.querySelectorAll<HTMLAnchorElement>('a[data-shared-fund-link]');
@@ -195,17 +457,53 @@ function scrollToSharedFundSection() {
 }
 
 async function fetchSharedFundData(path: string, options: RequestInit = {}) {
-  const request = await fetch(`${sharedFundApiBase}${path}`, {
+  const response = await fetch(`${sharedFundApiBase}${path}`, {
     credentials: 'include',
     headers: getSharedFundHeaders(Boolean(options.body === undefined ? true : options.body)),
     ...options,
   });
 
-  const contentType = request.headers.get('content-type') || '';
-  const payload = contentType.includes('application/json') ? await request.json() : await request.text();
+  const contentType = response.headers.get('content-type') || '';
+  const isJson = contentType.includes('application/json');
+  const payload = isJson ? await response.json() : await response.text();
 
-  if (!request.ok) {
-    const message = payload?.detail || payload?.message || request.statusText || 'Lỗi khi kết nối quỹ chung.';
+  if (!response.ok) {
+    console.error('❌ API Error:', {
+      status: response.status,
+      statusText: response.statusText,
+      contentType,
+      isJson,
+      payload,
+      url: `${sharedFundApiBase}${path}`
+    });
+
+    // Log payload chi tiết hơn
+    console.error('❌ Payload details:', JSON.stringify(payload, null, 2));
+
+    let message = response.statusText || 'Lỗi khi kết nối quỹ chung.';
+    if (isJson && payload) {
+      if (payload.detail) {
+        message = payload.detail;
+      } else if (payload.message) {
+        message = payload.message;
+      } else if (payload.user) {
+        message = Array.isArray(payload.user) ? payload.user.join(' ') : String(payload.user);
+      } else if (payload.role) {
+        message = Array.isArray(payload.role) ? payload.role.join(' ') : String(payload.role);
+      } else if (typeof payload === 'object') {
+        const fieldErrors = Object.values(payload)
+          .flatMap((value) => Array.isArray(value) ? value : [String(value)])
+          .filter(Boolean)
+          .map(String);
+        if (fieldErrors.length) {
+          message = fieldErrors.join(' ');
+        } else {
+          message = JSON.stringify(payload);
+        }
+      }
+    } else if (typeof payload === 'string' && payload.trim()) {
+      message = payload;
+    }
     throw new Error(message);
   }
   return payload;
@@ -573,17 +871,41 @@ async function submitSharedFundInvite(event: SubmitEvent) {
   if (!userIdInput || !roleSelect) return;
 
   const userId = Number(userIdInput.value);
-  const role = roleSelect.value;
+  const role = roleSelect.value.trim().toLowerCase();
   if (!userId) {
     showSharedFundNotice('Vui lòng nhập user ID.', 'error');
     return;
   }
+  if (!['member', 'owner'].includes(role)) {
+    showSharedFundNotice('Vai trò không hợp lệ. Vui lòng chọn Member hoặc Owner.', 'error');
+    return;
+  }
+
+  const payload = { user: userId, role };
+  console.debug('📨 Invite payload:', payload, 'endpoint:', `${sharedFundApiBase}funds/${currentSharedFundId}/invite/`);
 
   try {
-    await fetchSharedFundData(`funds/${currentSharedFundId}/invite/`, {
+    const response = await fetch(`${sharedFundApiBase}funds/${currentSharedFundId}/invite/`, {
+      credentials: 'include',
+      headers: getSharedFundHeaders(true),
       method: 'POST',
-      body: JSON.stringify({ user: userId, role }),
+      body: JSON.stringify(payload),
     });
+
+    const contentType = response.headers.get('content-type') || '';
+    const isJson = contentType.includes('application/json');
+    const data = isJson ? await response.json() : null;
+
+    if (!response.ok) {
+      if (response.status === 400 && data?.detail) {
+        showSharedFundNotice(data.detail, 'info');
+        return;
+      }
+
+      const message = (data && (data.message || data.detail)) || response.statusText || 'Lỗi khi mời thành viên.';
+      throw new Error(message);
+    }
+
     showSharedFundNotice('Đã gửi lời mời thành viên.', 'success');
     userIdInput.value = '';
     await loadInvitations(); // Reload invitations to update badge
@@ -881,6 +1203,24 @@ async function loadProfileData(): Promise<void> {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // 1. Kiểm tra xem có token trong máy không
+    const token = localStorage.getItem('accessToken');
+    
+    if (token) {
+        console.log("Đã tìm thấy token, đang tải dữ liệu...");
+        // 2. Nếu có token, tự động load dữ liệu
+        if (window.loadSavingsGoals) {
+            window.loadSavingsGoals();
+        }
+        
+        // (Tùy chọn) Ẩn form đăng nhập, hiện phần hiển thị dữ liệu
+        // document.getElementById('login-section').style.display = 'none';
+        // document.getElementById('data-section').style.display = 'block';
+    } else {
+        console.log("Chưa đăng nhập, vui lòng đăng nhập.");
+        // Hiển thị form đăng nhập nếu chưa có token
+    }
+
     // 1. Kiểm tra UI khi load trang
     updateNavbar();
 
@@ -1852,7 +2192,12 @@ class ExpenseManager {
     });
 
     document.getElementById('save-category-btn')?.addEventListener('click', () => this.addCategory());
-    document.getElementById('save-goal-btn')?.addEventListener('click', () => this.addGoal());
+    document.getElementById('save-goal-btn')?.addEventListener('click', async () => {
+      const success = await (window as any).handleAddGoal?.();
+      if (!success) {
+        alert('Lưu mục tiêu thất bại! Vui lòng kiểm tra lại đăng nhập và thông tin.');
+      }
+    });
     document.getElementById('do-contribute-btn')?.addEventListener('click', () => this.contributeToGoal());
     document.getElementById('close-contribute-modal')?.addEventListener('click', () => this.closeModals());
 
@@ -2660,28 +3005,31 @@ class ExpenseManager {
   }
 
   private setupBudgetEvents() {
-    document.getElementById('manage-budget-btn')?.addEventListener('click', () => {
+    document.getElementById('manage-budget-btn')?.addEventListener('click', async () => {
       this.budgetModal.classList.remove('hidden');
-      this.populateBudgetCategorySelect();
+      await fetchExpenseCategories();
+      // Set default month and year
+      const now = new Date();
+      (document.getElementById('budget-month') as HTMLSelectElement).value = (now.getMonth() + 1).toString();
+      (document.getElementById('budget-year') as HTMLInputElement).value = now.getFullYear().toString();
     });
 
     document.getElementById('close-budget-modal')?.addEventListener('click', () => {
       this.budgetModal.classList.add('hidden');
     });
 
-    this.budgetForm.addEventListener('submit', (e) => {
+    this.budgetForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const category = (document.getElementById('budget-category') as HTMLSelectElement).value;
+      const categoryId = parseInt((document.getElementById('budget-category') as HTMLSelectElement).value);
       const amountStr = (document.getElementById('budget-amount') as HTMLInputElement).value;
       const amount = parseInt(amountStr.replace(/\D/g, '')) || 0;
+      const month = parseInt((document.getElementById('budget-month') as HTMLSelectElement).value);
+      const year = parseInt((document.getElementById('budget-year') as HTMLInputElement).value);
 
-      if (amount > 0) {
-        this.categoryBudgets[category] = amount;
-        this.saveData();
-        this.render();
+      if (amount > 0 && categoryId) {
+        await saveBudget(categoryId, amount, month, year);
         this.budgetModal.classList.add('hidden');
         this.budgetForm.reset();
-        this.showToast(`Đã thiết lập ngân sách cho ${category}`, 'success');
       }
     });
 
@@ -2801,7 +3149,7 @@ class ExpenseManager {
     this.renderTrendChart();
     this.renderGoals();
     this.renderBudget();
-    this.renderCategoryBudgets();
+    this.loadBudgets(); // Load budgets from API instead of local
     if (!skipAlerts) {
       this.checkBudgets();
     }
@@ -2829,46 +3177,59 @@ class ExpenseManager {
     });
   }
 
-  private renderCategoryBudgets() {
-    if (!this.budgetListEl) return;
-    
-    const currentMonth = new Date().getMonth();
-    const currentYear = new Date().getFullYear();
-    const budgetEntries = Object.entries(this.categoryBudgets);
+  private async loadBudgets() {
+    try {
+        const response = await authFetch('/budgets/', { method: 'GET' });
+        const budgets = await response.json();
 
-    if (budgetEntries.length === 0) {
-      this.budgetListEl.innerHTML = `
-        <div class="py-4 text-center text-slate-400 text-xs font-medium">Chưa có ngân sách nào được thiết lập</div>
-      `;
-      return;
+        if (!this.budgetListEl) return;
+        
+        this.budgetListEl.innerHTML = ''; // Xóa nội dung cũ
+
+        if (budgets.length === 0) {
+            this.budgetListEl.innerHTML = `
+                <div class="py-4 text-center text-slate-400 text-xs font-medium">Chưa có ngân sách nào được thiết lập</div>
+            `;
+            return;
+        }
+
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
+
+        budgets.forEach((b: any) => {
+            const spent = this.transactions
+                .filter(t => {
+                    const d = new Date(t.date);
+                    return t.type === 'expense' && t.category_name === b.category_name && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+                })
+                .reduce((sum, t) => sum + t.amount, 0);
+            
+            const percent = Math.min((spent / b.amount) * 100, 100);
+            const colorClass = percent > 90 ? 'bg-rose-500' : percent > 70 ? 'bg-orange-500' : 'bg-emerald-500';
+
+            this.budgetListEl.innerHTML += `
+                <div class="space-y-2">
+                    <div class="flex justify-between items-end">
+                        <div>
+                            <p class="text-sm font-bold text-slate-900 dark:text-white">${b.category_name}</p>
+                            <p class="text-[10px] font-medium text-slate-400">Đã dùng ${this.formatCurrency(spent)} / ${this.formatCurrency(b.amount)}</p>
+                        </div>
+                        <p class="text-xs font-black ${percent > 90 ? 'text-rose-500' : 'text-slate-900 dark:text-white'}">${Math.round(percent)}%</p>
+                    </div>
+                    <div class="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <div class="h-full ${colorClass} transition-all duration-1000" style="width: ${percent}%"></div>
+                    </div>
+                </div>
+            `;
+        });
+    } catch (error) {
+        console.error("Lỗi tải ngân sách:", error);
+        if (this.budgetListEl) {
+            this.budgetListEl.innerHTML = `
+                <div class="py-4 text-center text-rose-400 text-xs font-medium">Lỗi tải ngân sách</div>
+            `;
+        }
     }
-
-    this.budgetListEl.innerHTML = budgetEntries.map(([category, amount]) => {
-      const spent = this.transactions
-        .filter(t => {
-          const d = new Date(t.date);
-          return t.type === 'expense' && t.category_name === category && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-        })
-        .reduce((sum, t) => sum + t.amount, 0);
-      
-      const percent = Math.min((spent / amount) * 100, 100);
-      const colorClass = percent > 90 ? 'bg-rose-500' : percent > 70 ? 'bg-orange-500' : 'bg-emerald-500';
-
-      return `
-        <div class="space-y-2">
-          <div class="flex justify-between items-end">
-            <div>
-              <p class="text-sm font-bold text-slate-900 dark:text-white">${category}</p>
-              <p class="text-[10px] font-medium text-slate-400">Đã dùng ${this.formatCurrency(spent)} / ${this.formatCurrency(amount)}</p>
-            </div>
-            <p class="text-xs font-black ${percent > 90 ? 'text-rose-500' : 'text-slate-900 dark:text-white'}">${Math.round((spent / amount) * 100)}%</p>
-          </div>
-          <div class="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-            <div class="h-full ${colorClass} transition-all duration-1000" style="width: ${percent}%"></div>
-          </div>
-        </div>
-      `;
-    }).join('');
   }
 
   private getCurrentBalance(): number {
@@ -3032,33 +3393,103 @@ class ExpenseManager {
     contributeModal.setAttribute('data-goal-id', id);
     document.getElementById('contribute-goal-name')!.textContent = goal.name;
     
+    // Display current balance
+    const currentBalance = this.getCurrentBalance();
+    const balanceEl = document.getElementById('contribute-current-balance')!;
+    balanceEl.textContent = this.formatCurrency(currentBalance);
+    
+    // Reset amount input and remaining balance display
+    const amountInput = document.getElementById('contribute-amount') as HTMLInputElement;
+    amountInput.value = '';
+    const remainingEl = document.getElementById('contribute-remaining-balance')!;
+    remainingEl.textContent = this.formatCurrency(currentBalance);
+    remainingEl.className = 'text-lg font-bold text-emerald-600';
+    
+    // Add real-time balance update on input
+    amountInput.oninput = (e) => {
+      const inputAmount = this.parseFormattedNumber((e.target as HTMLInputElement).value);
+      const remaining = currentBalance - inputAmount;
+      
+      if (isNaN(inputAmount) || inputAmount <= 0) {
+        remainingEl.textContent = this.formatCurrency(currentBalance);
+        remainingEl.className = 'text-lg font-bold text-emerald-600';
+      } else if (inputAmount > currentBalance) {
+        remainingEl.textContent = this.formatCurrency(remaining);
+        remainingEl.className = 'text-lg font-bold text-rose-600';
+      } else {
+        remainingEl.textContent = this.formatCurrency(remaining);
+        remainingEl.className = 'text-lg font-bold text-emerald-600';
+      }
+    };
+    
     overlay.classList.remove('hidden');
     overlay.classList.add('flex');
     contributeModal.classList.remove('hidden');
   }
 
-  private contributeToGoal() {
+  private async contributeToGoal() {
     const contributeModal = document.getElementById('contribute-modal')!;
     const id = contributeModal.getAttribute('data-goal-id');
     const amountInput = document.getElementById('contribute-amount') as HTMLInputElement;
     const amount = this.parseFormattedNumber(amountInput.value);
 
-    if (!id || isNaN(amount) || amount <= 0) return;
+    if (!id || isNaN(amount) || amount <= 0) {
+      this.showToast('Vui lòng nhập số tiền hợp lệ (> 0)', 'error');
+      return;
+    }
 
     const currentBalance = this.getCurrentBalance();
     if (amount > currentBalance) {
-      this.showToast('Số dư không đủ để góp quỹ!', 'error');
+      this.showToast(`Số dư không đủ! Bạn chỉ có ${this.formatCurrency(currentBalance)}`, 'error');
       return;
     }
 
     const goalIndex = this.goals.findIndex(g => g.id === id);
-    if (goalIndex !== -1) {
-      this.goals[goalIndex].current += amount;
+    if (goalIndex === -1) return;
+
+    const goal = this.goals[goalIndex];
+    const goalName = goal.name;
+    const newTotal = goal.current + amount;
+    const remainingAmount = goal.target - newTotal;
+    const token = localStorage.getItem('accessToken');
+
+    try {
+      // 1. Update savings goal on backend
+      const goalResponse = await authFetch(`/savings/goals/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          current_amount: newTotal
+        })
+      });
+
+      if (!goalResponse.ok) {
+        const error = await goalResponse.json();
+        throw new Error(error.detail || 'Không thể cập nhật mục tiêu');
+      }
+
+      // 2. Create expense transaction on backend
+      const today = new Date().toISOString().split('T')[0];
+      const transactionResponse = await authFetch('/expenses/', {
+        method: 'POST',
+        body: JSON.stringify({
+          moTa: `Góp vào quỹ: ${goalName}`,
+          amount: amount,
+          date: today,
+          loai: null // Category will be default or null
+        })
+      });
+
+      if (!transactionResponse.ok) {
+        const error = await transactionResponse.json();
+        throw new Error(error.moTa ? (Array.isArray(error.moTa) ? error.moTa[0] : error.moTa) : error.detail || 'Không thể tạo giao dịch');
+      }
+
+      // 3. Update local data
+      this.goals[goalIndex].current = newTotal;
       
-      // Also add as an expense to reflect in balance
       const transaction: Transaction = {
         id: Math.random().toString(36).substring(2, 9),
-        description: `Tiết kiệm cho: ${this.goals[goalIndex].name}`,
+        description: `Góp vào quỹ: ${goalName}`,
         amount,
         type: 'expense',
         category_name: 'Khác',
@@ -3067,15 +3498,31 @@ class ExpenseManager {
       this.transactions.unshift(transaction);
       
       this.saveData();
-      this.render();
       this.closeModals();
       amountInput.value = '';
       
-      if (this.goals[goalIndex].current >= this.goals[goalIndex].target) {
-        this.showToast(`Chúc mừng! Bạn đã hoàn thành ước mơ "${this.goals[goalIndex].name}"!`, 'warning');
+      // 4. Reload data from server to keep everything in sync
+      console.log('📥 Reloading data from server after contribution...');
+      await Promise.all([
+        (async () => {
+          if (window.loadSavingsGoals) {
+            await window.loadSavingsGoals();
+          }
+        })(),
+        this.loadAndRender(true) // Skip budget alerts on reload
+      ]);
+      
+      // Show success message
+      if (newTotal >= goal.target) {
+        this.showToast(`🎉 Chúc mừng! Bạn đã hoàn thành ước mơ "${goalName}"!`, 'warning');
       } else {
-        this.showToast(`Đã thêm ${this.formatCurrency(amount)} vào mục tiêu!`, 'warning');
+        const percentComplete = Math.round((newTotal / goal.target) * 100);
+        this.showToast(`✅ Đã góp ${this.formatCurrency(amount)} vào "${goalName}" (${percentComplete}% hoàn thành, còn ${this.formatCurrency(remainingAmount)})`, 'warning');
       }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Lỗi khi góp quỹ';
+      this.showToast(`❌ ${message}`, 'error');
+      console.error('Lỗi góp quỹ:', error);
     }
   }
 
@@ -4897,6 +5344,10 @@ declare global {
     lucide?: {
       createIcons: () => void;
     };
+    loadSavingsGoals?: () => Promise<void>;
+    createSavingsGoal?: (title: string, targetAmount: number, deadline: string) => Promise<boolean>;
+    handleAddGoal?: () => Promise<boolean>;
+    handleOpenServerGoalContribute?: (goalId: string) => void;
   }
 }
 
