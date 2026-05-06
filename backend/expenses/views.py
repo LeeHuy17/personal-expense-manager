@@ -16,6 +16,24 @@ class ThuNhapViewSet(viewsets.ModelViewSet):
         user = self.request.user
         return ThuNhap.objects.filter(user=user).order_by('-date')
 
+    def create(self, request, *args, **kwargs):
+        print(f"[DEBUG] ThuNhapViewSet.create() - User: {request.user.username}, Data: {request.data}")
+        try:
+            serializer = self.get_serializer(data=request.data)
+            print(f"[DEBUG] Serializer is_valid: {serializer.is_valid()}")
+            if not serializer.is_valid():
+                print(f"[DEBUG] Serializer errors: {serializer.errors}")
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            self.perform_create(serializer)
+            headers = self.get_success_headers(serializer.data)
+            print(f"[DEBUG] Successfully created ThuNhap: {serializer.data}")
+            return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        except Exception as e:
+            print(f"[DEBUG] Error creating ThuNhap: {e}")
+            import traceback
+            print(f"[DEBUG] Traceback: {traceback.format_exc()}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     def perform_create(self, serializer):
         # BẮT BUỘC 3: Khi lưu, phải gán cứng user là người đang đăng nhập
         serializer.save(user=self.request.user)
@@ -28,26 +46,17 @@ class ChiPhiViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         # Tương tự: Bảo mật tuyệt đối dữ liệu chi phí
         user = self.request.user
-        queryset = ChiPhi.objects.filter(user=user).order_by('-date')
-        print(f"[DEBUG] ChiPhiViewSet.get_queryset() - User: {user.username}, Count: {queryset.count()}")
-        return queryset
+        return ChiPhi.objects.filter(user=user).order_by('-date')
 
     def create(self, request, *args, **kwargs):
-        print(f"[DEBUG] ChiPhiViewSet.create() - User: {request.user.username}, Data: {request.data}")
         try:
             serializer = self.get_serializer(data=request.data)
-            print(f"[DEBUG] Serializer is_valid: {serializer.is_valid()}")
             if not serializer.is_valid():
-                print(f"[DEBUG] Serializer errors: {serializer.errors}")
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
             self.perform_create(serializer)
             headers = self.get_success_headers(serializer.data)
-            print(f"[DEBUG] Successfully created ChiPhi: {serializer.data}")
             return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
         except Exception as e:
-            print(f"[DEBUG] Error creating ChiPhi: {e}")
-            import traceback
-            print(f"[DEBUG] Traceback: {traceback.format_exc()}")
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def perform_create(self, serializer):
@@ -58,15 +67,11 @@ class ChiPhiViewSet(viewsets.ModelViewSet):
         print(f"[DEBUG] ChiPhiViewSet.destroy() - User: {request.user.username}, chiPhiId: {kwargs.get('chiPhiId') or kwargs.get('pk')}")
         try:
             instance = self.get_object()
-            print(f"[DEBUG] Found ChiPhi instance: ID={instance.chiPhiId}, User={instance.user.username}")
             self.perform_destroy(instance)
-            print(f"[DEBUG] Successfully deleted ChiPhi ID={instance.chiPhiId}")
             return Response(status=status.HTTP_204_NO_CONTENT)
         except ChiPhi.DoesNotExist:
-            print(f"[DEBUG] ChiPhi with PK={kwargs.get('pk')} not found for user {request.user.username}")
             return Response({"error": "Transaction not found"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            print(f"[DEBUG] Error deleting ChiPhi: {e}")
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 class LoaiViewSet(viewsets.ModelViewSet):

@@ -2,6 +2,7 @@ import * as d3 from 'd3';
 import { createIcons, icons } from 'lucide';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import axios from 'axios';
+import jsPDF from 'jspdf';
 import './index.css';
 import './ai/ai_chat.css';
 import './ai/ai_chat.js';
@@ -1579,6 +1580,7 @@ interface Transaction {
   category_name: string;
   categoryId?: number | string;
   date: string;
+  parsedDate?: number;
   incomeId?: number;  // 🔑 Primary key for income records
   chiPhiId?: number;  // 🔑 Primary key for expense records
 }
@@ -1611,6 +1613,8 @@ class ExpenseManager {
     { id: 'default-7', name: 'Khác', icon: 'plus', color: '#64748b', type: 'Chi tiêu' }
   ];
   private categoryBudgets: Record<string, number> = {};
+  private categoryLookup: Record<string, Category> = {};
+  private currentCategoryFilter: string = 'all';
   private goals: Goal[] = [];
   private monthlyBudget: number = 10000000; // Default 10M VND
   private isDarkMode: boolean = false;
@@ -1636,7 +1640,18 @@ class ExpenseManager {
   private budgetWarning: HTMLElement;
   private goalsList: HTMLElement;
   private aiAdviceContainer: HTMLElement;
-  private trendChartContainer: HTMLElement;
+  private expenseTrendContainer: HTMLElement;
+  private incomeTrendContainer: HTMLElement;
+  private chartPeriodFilter: HTMLSelectElement;
+  private trendPeriodFilter: HTMLSelectElement;
+  private trendOutlierButton: HTMLElement;
+  private trendOutlierNote: HTMLElement;
+  private hideTrendOutliers: boolean = false;
+  private chartTooltip: HTMLElement;
+  private chartTabsContainer: HTMLElement;
+  private chartOverlay: HTMLElement;
+  private chartLoginCTA: HTMLElement;
+  private chartTab: 'chart' | 'categories' | 'comparison' | 'export' = 'chart';
   private budgetListEl: HTMLElement;
   private budgetModal: HTMLElement;
   private budgetForm: HTMLFormElement;
@@ -1646,6 +1661,15 @@ class ExpenseManager {
   private searchTimeout?: ReturnType<typeof setTimeout>;
   private dateFrom: string = '';
   private dateTo: string = '';
+  private chartPeriod: string = 'all'; // '7d', '30d', '90d', 'all'
+  private trendPeriod: string = 'all';
+
+  // Chart caching and performance
+  private chartCache: Map<string, any> = new Map();
+  private previousArcs: { [key: string]: { startAngle: number; endAngle: number } } = {};
+  private categoryColorMap: { [key: string]: string } = {};
+  private lastChartData: any = null;
+  private isChartLoading: boolean = false;
 
   // URL sync
   private urlParams: URLSearchParams;
@@ -1667,7 +1691,16 @@ class ExpenseManager {
     this.loadFiltersFromURL();
     this.formEl = document.getElementById('transaction-form') as HTMLFormElement;
     this.chartContainer = document.getElementById('chart-container')!;
-    this.trendChartContainer = document.getElementById('trend-chart-container')!;
+    this.expenseTrendContainer = document.getElementById('expense-trend-container')!;
+    this.incomeTrendContainer = document.getElementById('income-trend-container')!;
+    this.chartPeriodFilter = document.getElementById('chart-period-filter') as HTMLSelectElement;
+    this.trendPeriodFilter = document.getElementById('trend-period-filter') as HTMLSelectElement;
+    this.trendOutlierButton = document.getElementById('trend-outlier-toggle')!;
+    this.trendOutlierNote = document.getElementById('trend-outlier-note')!;
+    this.chartTooltip = document.getElementById('chart-tooltip')!;
+    this.chartTabsContainer = document.getElementById('chart-tabs')!;
+    this.chartOverlay = document.getElementById('chart-overlay')!;
+    this.chartLoginCTA = document.getElementById('chart-login-cta')!;
     this.searchInput = document.getElementById('search-input') as HTMLInputElement;
     this.filterCategory = document.getElementById('filter-category') as HTMLSelectElement;
     this.recentSearchesContainer = document.getElementById('recent-searches')!;
@@ -1684,7 +1717,9 @@ class ExpenseManager {
     this.loadData();
     this.init();
     this.setupEventListeners();
+    this.updateChartTabButtons();
     this.setupBudgetEvents();
+    this.setDefaultDate(); // Khởi tạo ngày mặc định cho form
 
     // Initialize pagination manager
     const token = localStorage.getItem('accessToken') || '';
@@ -1981,10 +2016,33 @@ class ExpenseManager {
       await this.clearFilters();
     });
 
-    // Existing legacy controls are no longer used by the modular pagination component
-    document.getElementById('prev-page')?.classList.add('hidden');
-    document.getElementById('next-page')?.classList.add('hidden');
-    document.getElementById('page-numbers')?.classList.add('hidden');
+    // Chart period filters
+    this.chartPeriodFilter?.addEventListener('change', () => {
+      this.chartPeriod = this.chartPeriodFilter.value;
+      this.renderChart();
+    });
+
+    document.querySelectorAll('[data-chart-tab]').forEach(button => {
+      button.addEventListener('click', () => {
+        const tab = button.getAttribute('data-chart-tab') as 'chart' | 'categories' | 'comparison' | 'export';
+        if (tab) {
+          this.setChartTab(tab);
+        }
+      });
+    });
+
+    this.chartLoginCTA?.addEventListener('click', () => this.openAuthModal('login'));
+
+    this.trendPeriodFilter?.addEventListener('change', () => {
+      this.trendPeriod = this.trendPeriodFilter.value;
+      this.renderTrendChart();
+    });
+
+    this.trendOutlierButton?.addEventListener('click', () => {
+      this.hideTrendOutliers = !this.hideTrendOutliers;
+      this.trendOutlierButton.textContent = this.hideTrendOutliers ? 'Hiện outlier' : 'Ẩn outlier';
+      this.renderTrendChart();
+    });
 
     // Input formatting
     const amountInput = document.getElementById('amount') as HTMLInputElement;
@@ -2310,39 +2368,44 @@ class ExpenseManager {
         axios.get('http://127.0.0.1:8000/api/expenses/', { headers })
       ]);
 
+      this.rebuildCategoryLookup();
+      const categoryMap = this.categoryLookup;
+
       // Map income data
       const mappedIncomes: Transaction[] = incomeRes.data.map((item: any) => {
-        const categoryName = this.categories.find(c => c.id.toString() === item.loai?.toString())?.name || 'Khác';
+        const rawDate = item.date || new Date().toISOString();
         return {
           id: item.incomeId?.toString() || Math.random().toString(),
           incomeId: item.incomeId,  // 🔑 Store primary key for delete operations
           description: item.moTa || 'Thu nhập',
           amount: parseFloat(item.amount),
           type: 'income' as const,
-          category: categoryName,
+          category_name: categoryMap[String(item.loai)]?.name || 'Khác',
           categoryId: item.loai,
-          date: item.date || new Date().toISOString()
+          date: rawDate,
+          parsedDate: Number(new Date(rawDate).getTime()) || 0,
         };
       });
 
       // Map expense data
       const mappedExpenses: Transaction[] = expenseRes.data.map((item: any) => {
-        const categoryName = this.categories.find(c => c.id.toString() === item.loai?.toString())?.name || 'Khác';
+        const rawDate = item.date || new Date().toISOString();
         return {
           id: item.chiPhiId?.toString() || Math.random().toString(),
           chiPhiId: item.chiPhiId,  // 🔑 Store primary key for delete operations
           description: item.moTa || 'Chi tiêu',
           amount: parseFloat(item.amount),
           type: 'expense' as const,
-          category: categoryName,
+          category_name: categoryMap[String(item.loai)]?.name || 'Khác',
           categoryId: item.loai,
-          date: item.date || new Date().toISOString()
+          date: rawDate,
+          parsedDate: Number(new Date(rawDate).getTime()) || 0,
         };
       });
 
       // Merge and sort by date (newest first)
-      const allTransactions = [...mappedIncomes, ...mappedExpenses].sort((a, b) => 
-        new Date(b.date).getTime() - new Date(a.date).getTime()
+      const allTransactions = [...mappedIncomes, ...mappedExpenses].sort((a, b) =>
+        (b.parsedDate || 0) - (a.parsedDate || 0)
       );
 
       console.log('✅ Fetched incomes:', mappedIncomes.length, 'expenses:', mappedExpenses.length);
@@ -2357,7 +2420,9 @@ class ExpenseManager {
 
   private loadData() {
     const savedTransactions = localStorage.getItem('transactions');
-    if (savedTransactions) this.transactions = JSON.parse(savedTransactions);
+    if (savedTransactions) {
+      this.transactions = JSON.parse(savedTransactions).map((tx: Transaction) => this.normalizeTransaction(tx));
+    }
 
     const savedCategories = localStorage.getItem('categories');
     if (savedCategories) {
@@ -2375,6 +2440,7 @@ class ExpenseManager {
           type: item.type
         }));
       }
+      this.rebuildCategoryLookup();
     }
 
     const savedBudgets = localStorage.getItem('categoryBudgets');
@@ -2382,13 +2448,53 @@ class ExpenseManager {
 
     const savedGoals = localStorage.getItem('goals');
     if (savedGoals) this.goals = JSON.parse(savedGoals);
+
+    this.rebuildCategoryLookup();
   }
 
   private saveData() {
+    this.rebuildCategoryLookup();
     localStorage.setItem('transactions', JSON.stringify(this.transactions));
     localStorage.setItem('categories', JSON.stringify(this.categories));
     localStorage.setItem('categoryBudgets', JSON.stringify(this.categoryBudgets));
     localStorage.setItem('goals', JSON.stringify(this.goals));
+  }
+
+  private rebuildCategoryLookup(): void {
+    this.categoryLookup = {};
+    this.categories.forEach((category) => {
+      this.categoryLookup[String(category.id)] = category;
+      this.categoryLookup[String(category.name)] = category;
+    });
+  }
+
+  private getCategoryMeta(categoryOrId: string | number | undefined): Category {
+    if (!categoryOrId) {
+      return { id: 'unknown', name: 'Khác', icon: 'tag', color: '#64748b', type: 'Chi tiêu' };
+    }
+    return this.categoryLookup[String(categoryOrId)] || this.categoryLookup['Khác'] || { id: 'unknown', name: 'Khác', icon: 'tag', color: '#64748b', type: 'Chi tiêu' };
+  }
+
+  private normalizeTransaction(transaction: Transaction): Transaction {
+    if (transaction.parsedDate !== undefined) {
+      return transaction;
+    }
+    const rawDate = transaction.date || new Date().toISOString();
+    const parsedDate = Number(new Date(rawDate).getTime()) || 0;
+    return {
+      ...transaction,
+      date: rawDate,
+      parsedDate,
+    };
+  }
+
+  private getTransactionTimestamp(transaction: Transaction): number {
+    if (transaction.parsedDate !== undefined) {
+      return transaction.parsedDate;
+    }
+    const parsedDate = Number(new Date(transaction.date).getTime()) || 0;
+    transaction.parsedDate = parsedDate;
+    return parsedDate;
   }
 
   private addMockData(): void {
@@ -2503,6 +2609,7 @@ class ExpenseManager {
         color: cat.color,
         type: cat.type
       }));
+      this.rebuildCategoryLookup();
 
       this.saveData(); // Lưu vào localStorage để đồng bộ
       this.updateCategoryDropdowns();
@@ -2536,6 +2643,18 @@ class ExpenseManager {
       btnIncome?.classList.replace('border-green-500', 'border-gray-100');
       btnIncome?.classList.replace('text-green-600', 'text-gray-400');
       btnIncome?.classList.remove('bg-green-50');
+    }
+  }
+
+  private setDefaultDate() {
+    const dateInput = document.getElementById('transaction-date') as HTMLInputElement;
+    if (dateInput) {
+      // Set to today's date in YYYY-MM-DD format
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      dateInput.value = `${year}-${month}-${day}`;
     }
   }
 
@@ -2720,6 +2839,7 @@ class ExpenseManager {
     const amountInput = document.getElementById('amount') as HTMLInputElement;
     const typeInput = document.getElementById('type') as HTMLInputElement;
     const categorySelect = document.getElementById('transaction-category') as HTMLSelectElement;
+    const dateInput = document.getElementById('transaction-date') as HTMLInputElement;
 
     const desc = descInput.value;
     const amount = this.parseFormattedNumber(amountInput.value);
@@ -2728,8 +2848,9 @@ class ExpenseManager {
     const selectedCategoryId = parseInt(categoryId, 10);
     const categoryObj = this.categories.find(c => c.id.toString() === categoryId.toString());
     const categoryName = categoryObj?.name || 'Khác';
+    const date = dateInput.value; // Lấy ngày từ input (format YYYY-MM-DD)
 
-    if (!desc || isNaN(amount) || amount <= 0 || !categoryId || isNaN(selectedCategoryId)) {
+    if (!desc || isNaN(amount) || amount <= 0 || !categoryId || isNaN(selectedCategoryId) || !date) {
       this.showToast('Vui lòng điền đầy đủ thông tin giao dịch', 'error');
       return;
     }
@@ -2741,7 +2862,7 @@ class ExpenseManager {
       type,
       category_name: categoryName,
       categoryId: selectedCategoryId,
-      date: new Date().toISOString()
+      date: new Date(date).toISOString()
     };
 
     const btn = this.formEl.querySelector('button[type="submit"]') as HTMLButtonElement;
@@ -2759,13 +2880,20 @@ class ExpenseManager {
         ? 'http://127.0.0.1:8000/api/incomes/'
         : 'http://127.0.0.1:8000/api/expenses/';
 
-      // Send to API with JWT token
-      const response = await axios.post(endpoint, {
+      const payload = {
         amount: amount,
         moTa: desc,  // ✅ FIXED: Use 'moTa' instead of 'description' to match serializer
         loai: selectedCategoryId,
-        date: new Date().toISOString().split('T')[0] // Ngày hôm nay (YYYY-MM-DD)
-      }, {
+        date: date // Gửi ngày được chọn (YYYY-MM-DD)
+      };
+
+      // Debug: Log payload trước khi gửi
+      console.log('📤 [DEBUG] Gửi payload:', payload);
+      console.log('📤 [DEBUG] Endpoint:', endpoint);
+      console.log('📤 [DEBUG] Token exists:', !!token);
+
+      // Send to API with JWT token
+      const response = await axios.post(endpoint, payload, {
         headers: {
           'Authorization': `Token ${token}`,  // ✅ Use 'Token' not 'Bearer' for TokenAuthentication
           'Content-Type': 'application/json'
@@ -2782,6 +2910,7 @@ class ExpenseManager {
         
         // Reset form immediately
         this.formEl.reset();
+        this.setDefaultDate(); // Set date to today after reset
         (this as any).updateTypeToggle('expense');
         
         // Reload data from API to reflect changes
@@ -2797,8 +2926,33 @@ class ExpenseManager {
       btn.disabled = false;
       btn.textContent = originalText || 'Lưu giao dịch';
       
-      const errorMsg = error.response?.data?.detail || error.message || 'Lỗi khi lưu giao dịch';
+      // Parse detailed error response
+      let errorMsg = 'Lỗi khi lưu giao dịch';
+      
+      if (error.response?.data) {
+        const data = error.response.data;
+        // Check if it's validation errors (object with field names as keys)
+        if (typeof data === 'object') {
+          const errors = [];
+          for (const [key, value] of Object.entries(data)) {
+            if (Array.isArray(value)) {
+              errors.push(`${key}: ${value.join(', ')}`);
+            } else if (typeof value === 'string') {
+              errors.push(`${key}: ${value}`);
+            }
+          }
+          if (errors.length > 0) {
+            errorMsg = errors.join(' | ');
+          } else if (data.detail) {
+            errorMsg = data.detail;
+          }
+        }
+      } else if (error.message) {
+        errorMsg = error.message;
+      }
+      
       console.error('❌ Lỗi API:', errorMsg);
+      console.error('📋 Full error response:', error.response?.data);
       this.showToast(errorMsg, 'error');
     }
   }
@@ -3060,7 +3214,8 @@ class ExpenseManager {
     Object.entries(this.categoryBudgets).forEach(([category, amount]) => {
       const spent = this.transactions
         .filter(t => {
-          const d = new Date(t.date);
+          const txTimestamp = this.getTransactionTimestamp(t);
+          const d = new Date(txTimestamp);
           return t.type === 'expense' && t.category_name === category && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
         })
         .reduce((sum, t) => sum + t.amount, 0);
@@ -3074,58 +3229,69 @@ class ExpenseManager {
     });
   }
 
-  private async loadBudgets() {
+  public async loadBudgets() {
     try {
-        const response = await authFetch('/budgets/', { method: 'GET' });
-        const budgets = await response.json();
+      const response = await authFetch('/budgets/', { method: 'GET' });
+      const budgets = await response.json();
 
-        if (!this.budgetListEl) return;
-        
-        this.budgetListEl.innerHTML = ''; // Xóa nội dung cũ
+      if (!this.budgetListEl) return;
+      this.budgetListEl.innerHTML = ''; // Xóa nội dung cũ
 
-        if (budgets.length === 0) {
-            this.budgetListEl.innerHTML = `
-                <div class="py-4 text-center text-slate-400 text-xs font-medium">Chưa có ngân sách nào được thiết lập</div>
-            `;
-            return;
-        }
+      if (!Array.isArray(budgets) || budgets.length === 0) {
+        this.budgetListEl.innerHTML = `
+          <div class="py-4 text-center text-slate-400 text-xs font-medium">Chưa có ngân sách nào được thiết lập</div>
+        `;
+        this.categoryBudgets = {};
+        return;
+      }
 
-        const currentMonth = new Date().getMonth();
-        const currentYear = new Date().getFullYear();
+      const currentMonth = new Date().getMonth() + 1; // month field is 1-based
+      const currentYear = new Date().getFullYear();
+      this.categoryBudgets = {};
 
-        budgets.forEach((b: any) => {
-            const spent = this.transactions
-                .filter(t => {
-                    const d = new Date(t.date);
-                    return t.type === 'expense' && t.category_name === b.category_name && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-                })
-                .reduce((sum, t) => sum + t.amount, 0);
-            
-            const percent = Math.min((spent / b.amount) * 100, 100);
-            const colorClass = percent > 90 ? 'bg-rose-500' : percent > 70 ? 'bg-orange-500' : 'bg-emerald-500';
+      budgets.forEach((b: any) => {
+        const categoryName = b.category_name || b.category?.tenLoai || b.category?.name;
+        const amount = typeof b.amount === 'number' ? b.amount : parseFloat(String(b.amount));
+        const month = Number(b.month);
+        const year = Number(b.year);
 
-            this.budgetListEl.innerHTML += `
-                <div class="space-y-2">
-                    <div class="flex justify-between items-end">
-                        <div>
-                            <p class="text-sm font-bold text-slate-900 dark:text-white">${b.category_name}</p>
-                            <p class="text-[10px] font-medium text-slate-400">Đã dùng ${this.formatCurrency(spent)} / ${this.formatCurrency(b.amount)}</p>
-                        </div>
-                        <p class="text-xs font-black ${percent > 90 ? 'text-rose-500' : 'text-slate-900 dark:text-white'}">${Math.round(percent)}%</p>
-                    </div>
-                    <div class="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                        <div class="h-full ${colorClass} transition-all duration-1000" style="width: ${percent}%"></div>
-                    </div>
-                </div>
-            `;
-        });
+        if (!categoryName || isNaN(amount) || amount <= 0) return;
+        if (isNaN(month) || isNaN(year) || month !== currentMonth || year !== currentYear) return;
+
+        this.categoryBudgets[categoryName] = amount;
+
+        const spent = this.transactions
+          .filter(t => {
+            const d = new Date(t.date);
+            return t.type === 'expense' && t.category_name === categoryName && d.getMonth() + 1 === currentMonth && d.getFullYear() === currentYear;
+          })
+          .reduce((sum, t) => sum + t.amount, 0);
+
+        const percent = Math.min((spent / b.amount) * 100, 100);
+        const colorClass = percent > 90 ? 'bg-rose-500' : percent > 70 ? 'bg-orange-500' : 'bg-emerald-500';
+
+        this.budgetListEl.innerHTML += `
+          <div class="space-y-2">
+            <div class="flex justify-between items-end">
+              <div>
+                <p class="text-sm font-bold text-slate-900 dark:text-white">${b.category_name}</p>
+                <p class="text-[10px] font-medium text-slate-400">Đã dùng ${this.formatCurrency(spent)} / ${this.formatCurrency(b.amount)}</p>
+              </div>
+              <p class="text-xs font-black ${percent > 90 ? 'text-rose-500' : 'text-slate-900 dark:text-white'}">${Math.round(percent)}%</p>
+            </div>
+            <div class="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+              <div class="h-full ${colorClass} transition-all duration-1000" style="width: ${percent}%"></div>
+            </div>
+          </div>
+        `;
+      });
     } catch (error) {
-        console.error("Lỗi tải ngân sách:", error);
-        if (this.budgetListEl) {
-            this.budgetListEl.innerHTML = `
-                <div class="py-4 text-center text-rose-400 text-xs font-medium">Lỗi tải ngân sách</div>
-            `;
-        }
+      console.error("Lỗi tải ngân sách:", error);
+      if (this.budgetListEl) {
+        this.budgetListEl.innerHTML = `
+          <div class="py-4 text-center text-rose-400 text-xs font-medium">Lỗi tải ngân sách</div>
+        `;
+      }
     }
   }
 
@@ -3426,19 +3592,20 @@ class ExpenseManager {
   private getFilteredTransactions(): Transaction[] {
     const searchTerm = this.searchInput.value.toLowerCase();
     const catFilter = this.filterCategory.value;
+    const fromTimestamp = this.dateFrom ? new Date(this.dateFrom).getTime() : null;
+    const toTimestamp = this.dateTo ? new Date(this.dateTo).setHours(23, 59, 59, 999) : null;
 
     let filtered = this.transactions.filter(t => {
       const matchesSearch = t.description.toLowerCase().includes(searchTerm) || t.category_name.toLowerCase().includes(searchTerm);
       const matchesCat = catFilter === 'all' || t.category_name === catFilter;
       
       let matchesDate = true;
-      if (this.dateFrom) {
-        matchesDate = matchesDate && new Date(t.date) >= new Date(this.dateFrom);
+      const txTimestamp = this.getTransactionTimestamp(t);
+      if (fromTimestamp !== null) {
+        matchesDate = matchesDate && txTimestamp >= fromTimestamp;
       }
-      if (this.dateTo) {
-        const toDate = new Date(this.dateTo);
-        toDate.setHours(23, 59, 59, 999);
-        matchesDate = matchesDate && new Date(t.date) <= toDate;
+      if (toTimestamp !== null) {
+        matchesDate = matchesDate && txTimestamp <= toTimestamp;
       }
 
       return matchesSearch && matchesCat && matchesDate;
@@ -3446,9 +3613,11 @@ class ExpenseManager {
 
     // Sorting
     filtered.sort((a, b) => {
+      const aTs = this.getTransactionTimestamp(a);
+      const bTs = this.getTransactionTimestamp(b);
       switch (this.sortBy) {
-        case 'date-desc': return new Date(b.date).getTime() - new Date(a.date).getTime();
-        case 'date-asc': return new Date(a.date).getTime() - new Date(b.date).getTime();
+        case 'date-desc': return bTs - aTs;
+        case 'date-asc': return aTs - bTs;
         case 'amount-desc': return b.amount - a.amount;
         case 'amount-asc': return a.amount - b.amount;
         case 'category': return a.category_name.localeCompare(b.category_name);
@@ -3482,7 +3651,7 @@ class ExpenseManager {
     }
 
     this.listEl.innerHTML = this.transactions.map((t) => {
-      const categoryObj = this.categories.find(c => c.name === t.category_name || c.id === t.category_name) || { icon: 'tag', color: '#64748b' };
+      const categoryObj = this.getCategoryMeta(t.category_name || t.categoryId);
       const displayId = t.id;
 
       return `
@@ -3825,7 +3994,7 @@ class ExpenseManager {
     }
     
     // Find category object for icon and color
-    const categoryObj = this.categories.find(c => c.name === category) || { icon: 'tag', color: '#64748b' };
+    const categoryObj = this.getCategoryMeta(category || undefined);
     
     // Create HTML
     item.className = 'p-6 flex items-center justify-between hover:bg-orange-50/30 dark:hover:bg-slate-800 transition-all group animate-in slide-in-from-bottom-4 fade-in duration-500';
@@ -3908,11 +4077,9 @@ class ExpenseManager {
     }
 
     this.listEl.innerHTML = paginated.map((t, index) => {
-      const categoryObj = this.categories.find(c => c.name === t.category_name) || { icon: 'tag', color: '#64748b' };
+      const categoryObj = this.getCategoryMeta(t.category_name || t.categoryId);
       const primaryId = t.type === 'income' ? t.incomeId : t.chiPhiId;
       const displayId = primaryId || t.id;
-
-      console.log(`🔍 [RENDER] Transaction - Type: ${t.type}, Primary ID: ${primaryId}, Display ID: ${displayId}`);
 
       return `
       <div data-id="${displayId}" class="p-6 flex items-center justify-between hover:bg-orange-50/30 dark:hover:bg-slate-800 transition-all group animate-in slide-in-from-bottom-4 fade-in duration-500" style="animation-delay: ${index * 30}ms">
@@ -3972,31 +4139,257 @@ class ExpenseManager {
   }
 
   private renderChart() {
-    const expenses = this.transactions.filter(t => t.type === 'expense');
-    const isDark = document.documentElement.classList.contains('dark');
-    
-    if (expenses.length === 0) {
-      this.chartContainer.innerHTML = `
-        <div id="no-data-chart" class="flex flex-col items-center text-slate-300 animate-in fade-in duration-1000">
-          <i data-lucide="pie-chart" class="w-16 h-16 mb-4 opacity-20"></i>
-          <p class="italic text-sm">Chưa có dữ liệu để phân tích</p>
-        </div>
-      `;
-      return;
+    // Prevent multiple simultaneous renders
+    if (this.isChartLoading) return;
+
+    const cacheKey = `${this.chartPeriod}-${this.chartTab}-${this.transactions.reduce((sum, t) => sum + t.amount, 0)}`;
+    if (this.chartCache.has(cacheKey)) {
+      const cached = this.chartCache.get(cacheKey);
+      if (cached && cached.timestamp > Date.now() - 30000) { // Cache for 30 seconds
+        this.chartContainer.innerHTML = cached.html;
+        return;
+      }
     }
 
-    this.chartContainer.innerHTML = '';
-    const categoryData = d3.rollups(
-      expenses,
-      v => d3.sum(v, d => d.amount),
-      d => d.category_name
-    ).map(([name, value]) => ({ name, value }));
+    this.isChartLoading = true;
+    this.showChartLoading();
+    this.updateChartAuthOverlay();
 
-    const width = 280;
-    const height = 280;
+    try {
+      // Filter expenses by period
+      let expenses = this.transactions.filter(t => t.type === 'expense');
+      expenses = this.filterTransactionsByPeriod(expenses, this.chartPeriod);
+
+      const isDark = document.documentElement.classList.contains('dark');
+
+      if (expenses.length === 0) {
+        const emptyHtml = `
+          <div id="no-data-chart" class="flex flex-col items-center text-slate-300 animate-in fade-in duration-1000" role="status" aria-label="Không có dữ liệu chi tiêu">
+            <i data-lucide="pie-chart" class="w-16 h-16 mb-4 opacity-20" aria-hidden="true"></i>
+            <p class="italic text-sm">Chưa có dữ liệu để phân tích</p>
+          </div>
+        `;
+        this.chartContainer.innerHTML = emptyHtml;
+        this.cacheChartData(cacheKey, emptyHtml, [], 0, '');
+        return;
+      }
+
+      this.chartContainer.innerHTML = '';
+      const categoryData = this.prepareExpenseCategoryData(expenses);
+      const totalExpense = d3.sum(categoryData, d => d.value);
+
+      console.log('📊 Chart Data Summary:', {
+        totalExpenseAmount: totalExpense,
+        numberOfCategories: categoryData.length,
+        categories: categoryData.map(c => ({ name: c.name, value: c.value, percent: ((c.value / totalExpense) * 100).toFixed(1) + '%' }))
+      });
+
+      if (totalExpense === 0) {
+        const emptyHtml = `
+          <div id="no-data-chart" class="flex flex-col items-center text-slate-300 animate-in fade-in duration-1000" role="status" aria-label="Không có dữ liệu chi tiêu">
+            <i data-lucide="pie-chart" class="w-16 h-16 mb-4 opacity-20" aria-hidden="true"></i>
+            <p class="italic text-sm">Chưa có dữ liệu để phân tích</p>
+          </div>
+        `;
+        this.chartContainer.innerHTML = emptyHtml;
+        this.cacheChartData(cacheKey, emptyHtml, [], 0, '');
+        return;
+      }
+
+      const maxCategory = categoryData.reduce((max, cat) => cat.value > max.value ? cat : max, categoryData[0]);
+      const comparison = this.computeExpenseComparison(this.chartPeriod);
+
+      // Render based on current tab - each tab is independent
+      let chartHtml = '';
+      let summaryHtml = '';
+
+      if (this.chartTab === 'chart') {
+        // Tab Biểu đồ: Chỉ hiển thị donut chart
+        chartHtml = this.renderDonutOnly(categoryData, totalExpense, isDark);
+        summaryHtml = '';
+      } else if (this.chartTab === 'categories') {
+        // Tab Danh mục: Hiển thị danh sách chi tiết
+        chartHtml = this.renderCategoriesDetailedList(categoryData, totalExpense);
+        summaryHtml = '';
+      } else if (this.chartTab === 'comparison') {
+        // Tab So sánh: So sánh các kỳ
+        chartHtml = this.renderComparisonDonut(categoryData, totalExpense, isDark, comparison);
+        summaryHtml = '';
+      } else if (this.chartTab === 'export') {
+        // Tab Xuất: Hiển thị tùy chọn xuất
+        chartHtml = this.renderExportPDFView(categoryData, totalExpense, comparison);
+        summaryHtml = '';
+      }
+
+      this.chartContainer.innerHTML = chartHtml;
+
+      this.cacheChartData(cacheKey, chartHtml, categoryData, totalExpense, '');
+
+    } catch (error) {
+      console.error('Error rendering chart:', error);
+      this.chartContainer.innerHTML = `
+        <div class="flex flex-col items-center text-red-400 animate-in fade-in duration-500" role="alert">
+          <i data-lucide="alert-triangle" class="w-16 h-16 mb-4 opacity-50" aria-hidden="true"></i>
+          <p class="text-sm">Có lỗi khi tải biểu đồ. Vui lòng thử lại.</p>
+        </div>
+      `;
+    } finally {
+      this.isChartLoading = false;
+    }
+  }
+
+  private showChartLoading() {
+    this.chartContainer.innerHTML = `
+      <div class="flex flex-col items-center justify-center h-full animate-pulse" role="status" aria-label="Đang tải biểu đồ">
+        <div class="w-16 h-16 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin mb-4"></div>
+        <p class="text-sm text-slate-500 dark:text-slate-400">Đang phân tích dữ liệu...</p>
+      </div>
+    `;
+  }
+
+  private cacheChartData(key: string, html: string, legendData: any[], totalExpense: number, summaryHtml?: string) {
+    this.chartCache.set(key, {
+      html,
+      legendData,
+      totalExpense,
+      summaryHtml,
+      timestamp: Date.now()
+    });
+
+    // Limit cache size to prevent memory issues
+    if (this.chartCache.size > 10) {
+      const firstKey = this.chartCache.keys().next().value;
+      if (firstKey) {
+        this.chartCache.delete(firstKey);
+      }
+    }
+  }
+
+  private renderSkewedChart(categoryData: any[], totalExpense: number, maxCategory: any, maxPercent: number, isDark: boolean): string {
+    const isSingleCategory = categoryData.length === 1;
+    const displayName = isSingleCategory && maxCategory.name === 'Khác' ? 'Danh mục mặc định' : maxCategory.name;
+    const insightText = isSingleCategory
+      ? 'Bạn chỉ chi tiêu vào 1 danh mục trong khoảng thời gian này.'
+      : 'Chiếm gần như toàn bộ chi tiêu.';
+    const additionalInsight = isSingleCategory ? 'Không có sự phân bổ giữa các danh mục.' : '';
+
+    return `
+      <div class="flex flex-col items-center justify-center h-full text-center space-y-4 animate-in fade-in duration-700">
+        <div class="w-20 h-20 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shadow-lg" role="img" aria-label="Icon danh mục ${displayName}">
+          <span class="text-2xl text-slate-600 dark:text-slate-400">${this.getCategoryIcon(maxCategory.name)}</span>
+        </div>
+        <div>
+          <p class="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">Chi tiêu chủ yếu</p>
+          <p class="text-lg font-bold text-slate-900 dark:text-white">${displayName}</p>
+          <p class="text-2xl font-black text-orange-500 mt-2" aria-label="Số tiền: ${this.formatCurrency(maxCategory.value)}">${this.formatCurrency(maxCategory.value)}</p>
+          ${!isSingleCategory ? `<p class="text-base font-semibold text-slate-700 dark:text-slate-300 mt-2">${this.formatPercent(maxCategory.value, totalExpense)} tổng chi tiêu</p>` : ''}
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-3">${insightText}</p>
+          ${additionalInsight ? `<p class="text-xs text-slate-400 dark:text-slate-500 mt-1">${additionalInsight}</p>` : ''}
+        </div>
+      </div>
+    `;
+  }
+
+
+  private renderDonutChart(categoryData: any[], totalExpense: number, isDark: boolean, comparison: any): string {
+    const containerId = `chart-${Date.now()}`;
+    const topCategory = categoryData.reduce((max, cat) => cat.value > max.value ? cat : max, categoryData[0] || { name: 'Khác', value: 0 });
+
+    const width = 320;
+    const height = 320;
     const radius = Math.min(width, height) / 2;
 
-    const svg = d3.select(this.chartContainer)
+    setTimeout(() => this.renderDonutSVG(containerId, categoryData, totalExpense, isDark, width, height, radius), 0);
+
+    return `
+      <div class="space-y-6">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div class="rounded-[2rem] border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-5 shadow-sm">
+            <div class="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400 dark:text-slate-500">Tổng chi tiêu</div>
+            <div class="mt-4 text-3xl font-black text-rose-600 dark:text-rose-400">${this.formatCurrency(totalExpense)}</div>
+            <div class="mt-3 text-sm ${comparison.trendDirection === 'up' ? 'text-rose-600' : comparison.trendDirection === 'down' ? 'text-emerald-600' : 'text-slate-500'}">
+              ${comparison.label}
+            </div>
+          </div>
+          <div class="rounded-[2rem] border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-5 shadow-sm">
+            <div class="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400 dark:text-slate-500">Danh mục chi nhiều nhất</div>
+            <div class="mt-4 text-xl font-black text-slate-900 dark:text-white">${topCategory.name}</div>
+            <div class="mt-3 text-sm text-slate-500 dark:text-slate-400">${this.formatCurrency(topCategory.value)} · ${this.formatPercent(topCategory.value, totalExpense)}</div>
+          </div>
+        </div>
+        <div class="relative w-full h-[320px] rounded-[2rem] bg-slate-50 dark:bg-slate-950 overflow-hidden flex items-center justify-center">
+          <div id="${containerId}" class="w-full h-full flex items-center justify-center" role="img" aria-label="Biểu đồ phân bố chi tiêu"></div>
+          <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div class="text-center">
+              <p class="text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-400 dark:text-slate-500">Danh mục</p>
+              <p class="text-4xl font-black text-slate-900 dark:text-white">${categoryData.length}</p>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Số danh mục đang phân tích</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private computeExpenseComparison(period: string) {
+    const now = new Date();
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const days = this.getPeriodDays(period);
+    const endCurrent = now;
+    const startCurrent = new Date(now.getTime() - days * msPerDay);
+    const endPrevious = new Date(startCurrent.getTime() - 1);
+    const startPrevious = new Date(startCurrent.getTime() - days * msPerDay);
+
+    const currentTotal = this.transactions
+      .filter(t => t.type === 'expense')
+      .reduce((sum, t) => {
+        const txDate = new Date(t.date);
+        return txDate >= startCurrent && txDate <= endCurrent ? sum + t.amount : sum;
+      }, 0);
+
+    const previousTotal = this.transactions
+      .filter(t => t.type === 'expense')
+      .reduce((sum, t) => {
+        const txDate = new Date(t.date);
+        return txDate >= startPrevious && txDate <= endPrevious ? sum + t.amount : sum;
+      }, 0);
+
+    const diff = previousTotal === 0 ? (currentTotal === 0 ? 0 : 100) : ((currentTotal - previousTotal) / previousTotal) * 100;
+    const trendDirection = currentTotal > previousTotal ? 'up' : currentTotal < previousTotal ? 'down' : 'same';
+    const label = previousTotal === 0
+      ? currentTotal === 0
+        ? 'Không có chi tiêu kỳ này'
+        : 'Mới phát sinh chi tiêu'
+      : `${trendDirection === 'up' ? '▲ ' : '▼ '}${Math.abs(diff).toFixed(0).replace(/\.0$/, '')}% so với tuần trước`;
+
+    return {
+      currentTotal,
+      previousTotal,
+      diff: Math.round(diff),
+      trendDirection,
+      label
+    };
+  }
+
+  private getPeriodDays(period: string): number {
+    switch (period) {
+      case '7d': return 7;
+      case '30d': return 30;
+      case '90d': return 90;
+      default: return 7;
+    }
+  }
+
+  private renderDonutSVG(containerId: string, categoryData: any[], totalExpense: number, isDark: boolean, width: number, height: number, radius: number) {
+    console.log('🎨 Rendering SVG with categoryData:', categoryData.map(d => ({ name: d.name, value: d.value, color: this.getCategoryColor(d.name) })));
+
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    // Proper D3 cleanup to prevent memory leaks
+    d3.select(container).selectAll("*").remove();
+
+    const svg = d3.select(container)
       .append('svg')
       .attr('width', width)
       .attr('height', height)
@@ -4004,29 +4397,23 @@ class ExpenseManager {
       .append('g')
       .attr('transform', `translate(${width / 2}, ${height / 2})`);
 
-    const colors = [
-      '#f97316', '#10b981', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'
-    ];
-
-    const color = d3.scaleOrdinal<string>()
-      .domain(categoryData.map(d => d.name))
-      .range(colors);
+    const color = (categoryName: string) => this.getCategoryColor(categoryName);
 
     const pie = d3.pie<{ name: string; value: number }>()
       .value(d => d.value)
-      .sort(null);
+      .sort((a, b) => b.value - a.value);
 
     const arc = d3.arc<d3.PieArcDatum<{ name: string; value: number }>>()
-      .innerRadius(radius * 0.65)
-      .outerRadius(radius * 0.95)
-      .cornerRadius(12)
-      .padAngle(0.04);
+      .innerRadius(radius * 0.6)
+      .outerRadius(radius * 0.9)
+      .cornerRadius(8)
+      .padAngle(d => (d.data.value / totalExpense) < 0.05 ? 0.005 : 0.02);
 
     const arcHover = d3.arc<d3.PieArcDatum<{ name: string; value: number }>>()
-      .innerRadius(radius * 0.6)
-      .outerRadius(radius * 1.0)
-      .cornerRadius(15)
-      .padAngle(0.05);
+      .innerRadius(radius * 0.55)
+      .outerRadius(radius * 0.95)
+      .cornerRadius(10)
+      .padAngle(d => (d.data.value / totalExpense) < 0.05 ? 0.005 : 0.03);
 
     const arcs = svg.selectAll('arc')
       .data(pie(categoryData))
@@ -4035,156 +4422,266 @@ class ExpenseManager {
       .attr('class', 'arc');
 
     const paths = arcs.append('path') as d3.Selection<SVGPathElement, d3.PieArcDatum<{ name: string; value: number; }>, SVGGElement, unknown>;
-    
+
     paths
       .attr('fill', d => color(d.data.name))
       .attr('d', d => arc(d) as string)
-      .style('opacity', 0.8)
+      .style('opacity', 0.9)
       .attr('class', 'cursor-pointer transition-all duration-500')
-      .on('mouseover', function(event, d: d3.PieArcDatum<{ name: string; value: number; }>) {
-        d3.select(this)
+      .attr('tabindex', 0)
+      .attr('role', 'button')
+      .attr('aria-label', d => `${d.data.name}: ${this.formatCurrency(d.data.value)} (${this.formatPercent(d.data.value, totalExpense)})`)
+      .on('mouseover', (event, d: d3.PieArcDatum<{ name: string; value: number; }>) => {
+        const percent = ((d.data.value / totalExpense) * 100);
+        const percentText = percent < 1 ? '<1%' : `${percent.toFixed(1)}%`;
+        this.showChartTooltip(event, `${d.data.name}: ${this.formatCurrency(d.data.value)} (${percentText})`);
+
+        // Enhanced hover effect with scale
+        d3.select(event.target as SVGPathElement)
           .transition()
-          .duration(500)
+          .duration(200)
           .attrTween('d', () => {
-            const i = d3.interpolate({ startAngle: d.startAngle, endAngle: d.startAngle }, d);
+            const i = d3.interpolate(d, d);
             return (t) => arcHover(i(t) as any)!;
           })
           .style('opacity', 1)
-          .attr('filter', 'drop-shadow(0 0 8px rgba(249, 115, 22, 0.4))');
+          .attr('filter', 'drop-shadow(0 0 12px rgba(249, 115, 22, 0.3))')
+          .attr('transform', 'scale(1.05)');
       })
-      .on('mouseout', function(event, d: d3.PieArcDatum<{ name: string; value: number; }>) {
-        d3.select(this)
+      .on('mouseout', (event) => {
+        this.hideChartTooltip();
+        d3.select(event.target as SVGPathElement)
           .transition()
-          .duration(500)
+          .duration(200)
           .attrTween('d', () => {
-            const i = d3.interpolate(d, { startAngle: d.endAngle, endAngle: d.endAngle });
+            const d = d3.select(event.target as SVGPathElement).datum() as d3.PieArcDatum<{ name: string; value: number; }>;
+            const i = d3.interpolate(d, d);
             return (t) => arc(i(t) as any)!;
           })
-          .style('opacity', 0.8)
-          .attr('filter', 'none');
+          .style('opacity', 0.9)
+          .attr('filter', 'none')
+          .attr('transform', 'scale(1)');
+      })
+      .on('click', (event, d: d3.PieArcDatum<{ name: string; value: number; }>) => {
+        this.drillDownToCategory(d.data.name);
+      })
+      .on('keydown', (event, d: d3.PieArcDatum<{ name: string; value: number; }>) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          this.drillDownToCategory(d.data.name);
+        }
       })
       .transition()
-      .duration(1000)
-      .attrTween('d', function(this: SVGPathElement, d: d3.PieArcDatum<{ name: string; value: number; }>) {
-        const i = d3.interpolate({ startAngle: 0, endAngle: 0 }, d);
-        return function(t) { return arc(i(t))!; };
+      .duration(1200)
+      .attrTween('d', (d: d3.PieArcDatum<{ name: string; value: number; }>) => {
+        const previousData = this.previousArcs && this.previousArcs[d.data.name] ? this.previousArcs[d.data.name] : { startAngle: 0, endAngle: 0 };
+        const i = d3.interpolate(previousData, d);
+        return (t) => arc(i(t))!;
       });
 
-    const totalExpense = d3.sum(categoryData, d => d.value);
-
-    // Add labels for better observation
+    // Store current arcs for next animation
+    this.previousArcs = {};
+    pie(categoryData).forEach(d => {
+      this.previousArcs[d.data.name] = { startAngle: d.startAngle, endAngle: d.endAngle };
+    });
     const labelArc = d3.arc<d3.PieArcDatum<{ name: string; value: number }>>()
-      .innerRadius(radius * 0.9)
-      .outerRadius(radius * 0.9);
+      .innerRadius(radius * 0.75)
+      .outerRadius(radius * 0.75);
 
     arcs.append('text')
       .attr('transform', d => `translate(${labelArc.centroid(d)})`)
       .attr('dy', '0.35em')
-      .attr('class', `text-[9px] font-bold ${isDark ? 'fill-slate-400' : 'fill-slate-500'}`)
-      .attr('text-anchor', d => (d.endAngle + d.startAngle) / 2 > Math.PI ? 'end' : 'start')
+      .attr('class', `text-[10px] font-black ${isDark ? 'fill-white' : 'fill-slate-900'}`)
+      .attr('text-anchor', 'middle')
       .text(d => {
         const percent = (d.data.value / totalExpense) * 100;
-        return percent > 5 ? `${d.data.name} (${percent.toFixed(0)}%)` : '';
+        return percent > 3 ? `${percent.toFixed(0)}%` : '';
       })
       .style('opacity', 0)
       .transition()
-      .delay(1000)
-      .duration(500)
+      .delay(1200)
+      .duration(600)
       .style('opacity', 1);
+  }
 
-    const centerGroup = svg.append('g').attr('class', 'pointer-events-none');
-    
-    centerGroup.append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dy', '-0.8em')
-      .attr('class', `text-[8px] font-black uppercase tracking-[0.2em] ${isDark ? 'fill-slate-500' : 'fill-slate-400'}`)
-      .text('Chi tiêu');
-    
-    centerGroup.append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dy', '0.6em')
-      .attr('class', `text-xl font-black tracking-tight ${isDark ? 'fill-white' : 'fill-slate-900'}`)
-      .text(this.formatCurrency(totalExpense));
+  private renderDonutOnly(categoryData: any[], totalExpense: number, isDark: boolean): string {
+    console.log('🎯 Rendering donut chart with data:', categoryData);
+    console.log('Total expense:', totalExpense);
+
+    const containerId = `chart-${Date.now()}`;
+    const width = 320;
+    const height = 320;
+    const radius = Math.min(width, height) / 2;
+
+    // Use requestAnimationFrame for proper lifecycle control
+    requestAnimationFrame(() => {
+      this.renderDonutSVG(containerId, categoryData, totalExpense, isDark, width, height, radius);
+    });
+
+    // Tạo legend bên dưới donut chart
+    const legendItems = categoryData.map((category) => {
+      const color = this.getCategoryColor(category.name);
+      const percentage = this.formatPercent(category.value, totalExpense);
+      return `
+        <div class="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+          <div class="w-4 h-4 flex-shrink-0" style="background-color: ${color}"></div>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-medium text-slate-900 dark:text-white truncate">${category.name}</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">${this.formatCurrency(category.value)}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="flex flex-col items-center justify-center h-full space-y-6">
+        <div class="relative w-full max-w-[320px] h-[320px] rounded-[2rem] bg-slate-50 dark:bg-slate-950 overflow-hidden flex items-center justify-center">
+          <div id="${containerId}" class="w-full h-full flex items-center justify-center" role="img" aria-label="Biểu đồ phân bổ chi tiêu theo danh mục"></div>
+        </div>
+        <div class="w-full max-w-md">
+          <div class="text-center mb-4">
+            <p class="text-sm font-semibold text-slate-700 dark:text-slate-300">Tổng chi tiêu: ${this.formatCurrency(totalExpense)}</p>
+          </div>
+          <div class="text-center mb-4">
+            <p class="text-sm font-semibold text-slate-700 dark:text-slate-300">Chi tiết phân bổ</p>
+          </div>
+          <div class="grid grid-cols-1 gap-2">
+            ${legendItems}
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   private renderTrendChart() {
-    const expenses = this.transactions.filter(t => t.type === 'expense');
     const isDark = document.documentElement.classList.contains('dark');
-    
-    if (expenses.length === 0) {
-      this.trendChartContainer.innerHTML = `<p class="text-xs text-slate-400 italic">Chưa đủ dữ liệu xu hướng</p>`;
+    const filtered = this.filterTransactionsByPeriod(this.transactions, this.trendPeriod);
+
+    const groupDate = (transaction: Transaction) => {
+      const txDate = new Date(transaction.date);
+      return `${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}-${String(txDate.getDate()).padStart(2, '0')}`;
+    };
+
+    const incomeByDate = new Map(d3.rollups(
+      filtered.filter(t => t.type === 'income'),
+      v => d3.sum(v, d => d.amount),
+      d => groupDate(d)
+    ));
+
+    const expenseByDate = new Map(d3.rollups(
+      filtered.filter(t => t.type === 'expense'),
+      v => d3.sum(v, d => d.amount),
+      d => groupDate(d)
+    ));
+
+    const allDates = Array.from(new Set<string>([
+      ...incomeByDate.keys(),
+      ...expenseByDate.keys()
+    ]))
+      .map(date => new Date(date))
+      .sort((a, b) => a.getTime() - b.getTime());
+
+    if (allDates.length === 0) {
+      this.expenseTrendContainer.innerHTML = `<p class="text-xs text-slate-400 italic">Chưa có dữ liệu chi tiêu</p>`;
+      this.incomeTrendContainer.innerHTML = `<p class="text-xs text-slate-400 italic">Chưa có dữ liệu thu nhập</p>`;
+      this.trendOutlierNote.classList.add('hidden');
       return;
     }
 
-    this.trendChartContainer.innerHTML = '';
-    
-    // Group by date
-    const dailyData = d3.rollups(
-      expenses,
-      v => d3.sum(v, d => d.amount),
-      d => new Date(d.date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
-    ).map(([date, value]) => ({ date, value }))
-     .sort((a, b) => {
-       const [da, ma] = a.date.split('/').map(Number);
-       const [db, mb] = b.date.split('/').map(Number);
-       return ma !== mb ? ma - mb : da - db;
-     });
+    const dateRange = d3.timeDay.range(allDates[0], d3.timeDay.offset(allDates[allDates.length - 1], 1));
 
-    const width = this.trendChartContainer.clientWidth || 300;
-    const height = 200;
-    const margin = { top: 30, right: 30, bottom: 40, left: 60 };
+    const timeline = dateRange.map(date => {
+      const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      return {
+        date,
+        income: incomeByDate.get(iso) || 0,
+        expense: expenseByDate.get(iso) || 0
+      };
+    });
 
-    const svg = d3.select(this.trendChartContainer)
+    this.expenseTrendContainer.innerHTML = '';
+    this.incomeTrendContainer.innerHTML = '';
+
+    const hasExpense = timeline.some(d => d.expense > 0);
+    const hasIncome = timeline.some(d => d.income > 0);
+
+    const expenseValues = timeline.map(d => d.expense).filter(v => v > 0);
+    const incomeValues = timeline.map(d => d.income).filter(v => v > 0);
+    const expenseThreshold = this.getTrendOutlierThreshold(expenseValues);
+    const incomeThreshold = this.getTrendOutlierThreshold(incomeValues);
+    const hasExpenseOutliers = expenseValues.some(v => v > expenseThreshold);
+    const hasIncomeOutliers = incomeValues.some(v => v > incomeThreshold);
+
+    if (hasExpense) {
+      this.renderSingleTrendChart(this.expenseTrendContainer, timeline, 'expense', '#f97316', isDark, expenseThreshold, hasExpenseOutliers);
+    } else {
+      this.expenseTrendContainer.innerHTML = `<p class="text-xs text-slate-400 italic">Chưa có dữ liệu chi tiêu trong khoảng này</p>`;
+    }
+
+    if (hasIncome) {
+      this.renderSingleTrendChart(this.incomeTrendContainer, timeline, 'income', '#22c55e', isDark, incomeThreshold, hasIncomeOutliers);
+    } else {
+      this.incomeTrendContainer.innerHTML = `<p class="text-xs text-slate-400 italic">Chưa có dữ liệu thu nhập trong khoảng này</p>`;
+    }
+
+    if (this.hideTrendOutliers) {
+      this.trendOutlierNote.textContent = 'Đã ẩn giao dịch outlier/test để biểu đồ dễ quan sát.';
+      this.trendOutlierNote.classList.remove('hidden');
+    } else if (hasExpenseOutliers || hasIncomeOutliers) {
+      this.trendOutlierNote.textContent = 'Outlier đã bị giới hạn để biểu đồ dễ quan sát.';
+      this.trendOutlierNote.classList.remove('hidden');
+    } else {
+      this.trendOutlierNote.classList.add('hidden');
+    }
+  }
+
+  private renderSingleTrendChart(
+    container: HTMLElement,
+    timeline: { date: Date; income: number; expense: number }[],
+    field: 'income' | 'expense',
+    color: string,
+    isDark: boolean,
+    outlierThreshold: number,
+    hasOutliers: boolean
+  ) {
+    const width = container.clientWidth || 300;
+    const height = 140;
+    const margin = { top: 18, right: 24, bottom: 24, left: 50 };
+
+    const svg = d3.select(container)
       .append('svg')
       .attr('width', width)
       .attr('height', height)
       .append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
 
-    const x = d3.scalePoint()
-      .domain(dailyData.map(d => d.date))
+    const x = d3.scaleTime()
+      .domain(d3.extent(timeline, d => d.date) as [Date, Date])
       .range([0, width - margin.left - margin.right]);
 
+    const values = timeline.map(d => d[field]).filter(v => v > 0);
+    const maxValue = d3.max(values) || 0;
+    const scaleCap = this.getTrendScaleCap(values);
+    const displayMax = scaleCap > 0 ? scaleCap : maxValue;
+
     const y = d3.scaleLinear()
-      .domain([0, (d3.max(dailyData, d => d.value) || 0) * 1.2])
+      .domain([0, displayMax * 1.15 || 1])
+      .nice()
       .range([height - margin.top - margin.bottom, 0]);
 
-    // Add gradient
-    const gradient = svg.append('defs')
-      .append('linearGradient')
-      .attr('id', 'trend-gradient')
-      .attr('x1', '0%')
-      .attr('y1', '0%')
-      .attr('x2', '0%')
-      .attr('y2', '100%');
+    svg.append('g')
+      .attr('transform', `translate(0,${height - margin.top - margin.bottom})`)
+      .call(d3.axisBottom(x).ticks(5).tickFormat((d) => d3.timeFormat('%d/%m')(d as Date) as string))
+      .attr('class', `text-[8px] font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`)
+      .selectAll('text')
+      .attr('fill', isDark ? '#64748b' : '#94a3b8');
 
-    gradient.append('stop')
-      .attr('offset', '0%')
-      .attr('stop-color', '#f97316')
-      .attr('stop-opacity', 0.3);
+    svg.append('g')
+      .call(d3.axisLeft(y).ticks(4).tickFormat(d => `${(Number(d) / 1000).toFixed(0)}k`))
+      .attr('class', `text-[8px] font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`)
+      .selectAll('text')
+      .attr('fill', isDark ? '#64748b' : '#94a3b8');
 
-    gradient.append('stop')
-      .attr('offset', '100%')
-      .attr('stop-color', '#f97316')
-      .attr('stop-opacity', 0);
-
-    // Add area
-    const area = d3.area<{ date: string; value: number }>()
-      .x(d => x(d.date)!)
-      .y0(height - margin.top - margin.bottom)
-      .y1(d => y(d.value))
-      .curve(d3.curveMonotoneX);
-
-    svg.append('path')
-      .datum(dailyData)
-      .attr('fill', 'url(#trend-gradient)')
-      .attr('d', area)
-      .style('opacity', 0)
-      .transition()
-      .duration(1500)
-      .style('opacity', 1);
-
-    // Add grid lines
     svg.append('g')
       .attr('class', 'grid opacity-5')
       .attr('transform', `translate(0,${height - margin.top - margin.bottom})`)
@@ -4194,75 +4691,84 @@ class ExpenseManager {
       .attr('class', 'grid opacity-5')
       .call(d3.axisLeft(y).tickSize(-(width - margin.left - margin.right)).tickFormat(() => ''));
 
-    // Add axes
-    svg.append('g')
-      .attr('transform', `translate(0,${height - margin.top - margin.bottom})`)
-      .call(d3.axisBottom(x).ticks(5))
-      .attr('class', `text-[9px] font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`)
-      .selectAll('text')
-      .attr('fill', isDark ? '#64748b' : '#94a3b8');
-
-    svg.append('g')
-      .call(d3.axisLeft(y).ticks(5).tickFormat(d => `${(Number(d) / 1000).toFixed(0)}k`))
-      .attr('class', `text-[9px] font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`)
-      .selectAll('text')
-      .attr('fill', isDark ? '#64748b' : '#94a3b8');
-
-    // Add line
-    const line = d3.line<{ date: string; value: number }>()
-      .x(d => x(d.date)!)
-      .y(d => y(d.value))
+    const definedLine = d3.line<{ date: Date; income: number; expense: number }>()
+      .defined(d => !(this.hideTrendOutliers && d[field] > outlierThreshold))
+      .x(d => x(d.date))
+      .y(d => y(Math.min(d[field], displayMax)))
       .curve(d3.curveMonotoneX);
 
-    const path = svg.append('path')
-      .datum(dailyData)
+    if (field === 'expense') {
+      const area = d3.area<{ date: Date; income: number; expense: number }>()
+        .defined(d => !(this.hideTrendOutliers && d.expense > outlierThreshold))
+        .x(d => x(d.date))
+        .y0(height - margin.top - margin.bottom)
+        .y1(d => y(Math.min(d.expense, displayMax)))
+        .curve(d3.curveMonotoneX);
+
+      svg.append('path')
+        .datum(timeline)
+        .attr('fill', color)
+        .attr('opacity', 0.16)
+        .attr('d', area);
+    }
+
+    svg.append('path')
+      .datum(timeline)
       .attr('fill', 'none')
-      .attr('stroke', '#f97316')
-      .attr('stroke-width', 4)
-      .attr('stroke-linecap', 'round')
-      .attr('d', line);
+      .attr('stroke', color)
+      .attr('stroke-width', 2.5)
+      .attr('d', definedLine);
 
-    // Line animation
-    const totalLength = (path.node() as SVGPathElement).getTotalLength();
-    path.attr('stroke-dasharray', totalLength + ' ' + totalLength)
-      .attr('stroke-dashoffset', totalLength)
-      .transition()
-      .duration(1500)
-      .ease(d3.easeExpOut)
-      .attr('stroke-dashoffset', 0);
+    const points = svg.append('g');
 
-    // Add dots with animation
-    svg.selectAll('dot')
-      .data(dailyData)
+    points.selectAll('circle')
+      .data(timeline.filter(d => d[field] > 0 && !(this.hideTrendOutliers && d[field] > outlierThreshold)))
       .enter()
       .append('circle')
-      .attr('cx', d => x(d.date)!)
-      .attr('cy', d => y(d.value))
+      .attr('cx', d => x(d.date))
+      .attr('cy', d => y(Math.min(d[field], displayMax)))
       .attr('r', 0)
-      .attr('fill', '#f97316')
-      .attr('stroke', isDark ? '#0f172a' : '#fff')
-      .attr('stroke-width', 2)
-      .attr('class', 'hover:r-8 transition-all cursor-pointer')
+      .attr('fill', color)
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 1.5)
+      .on('mouseover', (event, d) => {
+        const type = field === 'income' ? 'Thu' : 'Chi';
+        this.showChartTooltip(event, `${d3.timeFormat('%d/%m/%Y')(d.date)}\n${type}: ${this.formatCurrency(d[field])}`);
+      })
+      .on('mouseout', () => this.hideChartTooltip())
       .transition()
-      .delay((d, i) => i * 100 + 1000)
-      .duration(500)
-      .attr('r', 5);
+      .delay((_, i) => i * 50 + 300)
+      .duration(300)
+      .attr('r', 4);
 
-    // Add value labels on trend chart
-    svg.selectAll('text-value')
-      .data(dailyData)
-      .enter()
-      .append('text')
-      .attr('x', d => x(d.date)!)
-      .attr('y', d => y(d.value) - 15)
-      .attr('text-anchor', 'middle')
-      .attr('class', `text-[8px] font-black ${isDark ? 'fill-orange-400' : 'fill-orange-600'}`)
-      .text(d => `${(d.value / 1000).toFixed(0)}k`)
-      .style('opacity', 0)
-      .transition()
-      .delay((d, i) => i * 100 + 1500)
-      .duration(500)
-      .style('opacity', 1);
+    if (!this.hideTrendOutliers && maxValue > displayMax) {
+      svg.append('text')
+        .attr('x', width - margin.left - margin.right)
+        .attr('y', height - margin.top - margin.bottom + 18)
+        .attr('text-anchor', 'end')
+        .attr('class', `text-[9px] ${isDark ? 'fill-slate-400' : 'fill-slate-500'} font-medium`)
+        .text('Giá trị lớn đã được giới hạn để dễ quan sát');
+    }
+  }
+
+  private getTrendScaleCap(values: number[]): number {
+    if (values.length === 0) return 0;
+    const sorted = [...values].sort((a, b) => a - b);
+    const max = sorted[sorted.length - 1];
+    const p90 = sorted[Math.floor((sorted.length - 1) * 0.9)] || max;
+
+    if (max > Math.max(p90 * 3, p90 + 5000000)) {
+      return Math.max(p90 * 1.2, p90 + 1000000);
+    }
+
+    return max;
+  }
+
+  private getTrendOutlierThreshold(values: number[]): number {
+    if (values.length === 0) return 0;
+    const sorted = [...values].sort((a, b) => a - b);
+    const p90 = sorted[Math.floor((sorted.length - 1) * 0.9)] || sorted[sorted.length - 1];
+    return Math.max(p90 * 3, p90 + 5000000);
   }
 
   private async getAIAdvice() {
@@ -4359,6 +4865,540 @@ class ExpenseManager {
     this.hideRecentSearches();
     this.currentPage = 1;
     this.renderList();
+  }
+
+  // New helper methods for chart improvements
+  private filterTransactionsByPeriod(transactions: any[], period: string): any[] {
+    const now = new Date();
+    let startDate: Date;
+
+    switch (period) {
+      case '7d':
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case '30d':
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        break;
+      case '90d':
+        startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        break;
+      default:
+        return transactions; // 'all' period
+    }
+
+    return transactions.filter(t => {
+      const txDate = new Date(t.date);
+      return !Number.isNaN(txDate.getTime()) && txDate >= startDate && txDate <= now;
+    });
+  }
+
+  private showChartTooltip(event: MouseEvent, content: string) {
+    const tooltip = this.chartTooltip;
+    tooltip.innerHTML = content;
+    tooltip.style.left = `${event.pageX + 10}px`;
+    tooltip.style.top = `${event.pageY - 10}px`;
+    tooltip.classList.remove('hidden');
+  }
+
+  private hideChartTooltip() {
+    this.chartTooltip.classList.add('hidden');
+  }
+
+
+  private setChartTab(tab: 'chart' | 'categories' | 'comparison' | 'export') {
+    this.chartTab = tab;
+    this.updateChartTabButtons();
+    this.renderChart();
+  }
+
+  private updateChartTabButtons() {
+    this.chartTabsContainer.querySelectorAll('[data-chart-tab]').forEach(button => {
+      const btn = button as HTMLElement;
+      if (btn.getAttribute('data-chart-tab') === this.chartTab) {
+        btn.classList.add('bg-orange-500', 'text-white');
+        btn.classList.remove('bg-slate-100', 'dark:bg-slate-800', 'text-slate-700', 'dark:text-slate-200');
+      } else {
+        btn.classList.remove('bg-orange-500', 'text-white');
+        btn.classList.add('bg-slate-100', 'dark:bg-slate-800', 'text-slate-700', 'dark:text-slate-200');
+      }
+    });
+  }
+
+  private updateChartAuthOverlay() {
+    if (this.isLoggedIn) {
+      this.chartOverlay.classList.add('hidden');
+    } else {
+      this.chartOverlay.classList.remove('hidden');
+    }
+  }
+
+  private generateExpenseInsights(data: { name: string; value: number }[], total: number): string {
+    if (data.length === 0) return '';
+
+    const topCategory = data[0];
+    const topPercent = (topCategory.value / total) * 100;
+
+    let insight = '';
+
+    if (topPercent > 70) {
+      insight = `💡 <strong>${topCategory.name}</strong> chiếm ${this.formatPercent(topCategory.value, total)} chi tiêu - đây là khoản chi lớn nhất của bạn.`;
+    } else if (data.length >= 3) {
+      const top3Total = data.slice(0, 3).reduce((sum, cat) => sum + cat.value, 0);
+      const top3Percent = (top3Total / total) * 100;
+      insight = `📊 Top 3 danh mục (${this.formatPercent(top3Total, total)}) chiếm phần lớn chi tiêu. Cân nhắc tối ưu hóa các khoản này.`;
+    } else {
+      insight = `📈 Chi tiêu được phân bổ khá đều giữa ${data.length} danh mục. Điều này cho thấy thói quen tài chính ổn định.`;
+    }
+
+    return `<div class="flex items-start gap-2"><div class="flex-1 text-sm text-blue-800 dark:text-blue-200">${insight}</div></div>`;
+  }
+
+  private exportChartData(data: { name: string; value: number }[], total: number) {
+    try {
+      const csvContent = [
+        ['Danh mục', 'Số tiền', 'Phần trăm'],
+        ...data.map(item => [
+          item.name,
+          item.value.toString(),
+          this.formatPercent(item.value, total)
+        ]),
+        ['', '', ''],
+        ['Tổng cộng', total.toString(), '100%']
+      ].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+
+      link.setAttribute('href', url);
+      link.setAttribute('download', `phan-bo-chi-tieu-${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      this.showToast('Đã xuất dữ liệu biểu đồ thành công!', 'success');
+    } catch (error) {
+      console.error('Export error:', error);
+      this.showToast('Có lỗi khi xuất dữ liệu. Vui lòng thử lại.', 'error');
+    }
+  }
+
+  private exportToPDF() {
+    try {
+      const expenses = this.transactions.filter(t => t.type === 'expense');
+      const filteredExpenses = this.filterTransactionsByPeriod(expenses, this.chartPeriod);
+      const categoryData = this.prepareExpenseCategoryData(filteredExpenses);
+      const totalExpense = d3.sum(categoryData, d => d.value);
+      const comparison = this.computeExpenseComparison(this.chartPeriod);
+
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      let yPosition = 20;
+
+      // Title
+      doc.setFontSize(20);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Báo cáo phân bổ chi tiêu', pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 15;
+
+      // Period
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Kỳ: ${this.getPeriodLabel(this.chartPeriod)}`, pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 10;
+      doc.text(`Ngày xuất: ${new Date().toLocaleDateString('vi-VN')}`, pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 20;
+
+      // Total expense
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Tổng chi tiêu: ${this.formatCurrency(totalExpense)}`, 20, yPosition);
+      yPosition += 15;
+
+      // Comparison
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`So sánh với kỳ trước: ${comparison.label}`, 20, yPosition);
+      yPosition += 20;
+
+      // Category list
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Chi tiết theo danh mục:', 20, yPosition);
+      yPosition += 10;
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      categoryData.forEach((category, index) => {
+        if (yPosition > pageHeight - 20) {
+          doc.addPage();
+          yPosition = 20;
+        }
+        const percentage = (category.value / totalExpense) * 100;
+        doc.text(`${index + 1}. ${category.name}: ${this.formatCurrency(category.value)} (${percentage.toFixed(1)}%)`, 20, yPosition);
+        yPosition += 8;
+      });
+
+      // Save the PDF
+      doc.save(`bao-cao-chi-tieu-${new Date().toISOString().split('T')[0]}.pdf`);
+      this.showToast('Đã xuất PDF thành công!', 'success');
+    } catch (error) {
+      console.error('PDF export error:', error);
+      this.showToast('Có lỗi khi xuất PDF. Vui lòng thử lại.', 'error');
+    }
+  }
+
+  private drillDownToCategory(category: string) {
+    // Filter transactions by category and show detailed view
+    this.currentCategoryFilter = category;
+    if (this.filterCategory) {
+      this.filterCategory.value = category;
+    }
+    this.currentPage = 1;
+    this.renderList();
+    this.showToast(`Đã lọc theo danh mục: ${category}`, 'success');
+  }
+
+  private getTransactionCategory(transaction: Transaction): string {
+    // Use category_name directly from transaction if available
+    if (transaction.category_name && String(transaction.category_name).trim()) {
+      const rawCategory = String(transaction.category_name).trim();
+      console.log('✅ Using category_name directly:', rawCategory);
+      return rawCategory;
+    }
+
+    const rawCategory = String(transaction.category_name || (transaction as any).category || '').trim();
+    if (!rawCategory) return 'Khác';
+
+    const cleaned = rawCategory
+      .normalize('NFC')
+      .replace(/[^0-9A-Za-zÀ-ỹà-ỹ\s]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const normalized = cleaned.toLowerCase();
+    if (!normalized || ['undefined', 'null', 'n/a'].includes(normalized)) return 'Khác';
+
+    const exactMatch = this.categories.find(c => c.name.toLowerCase() === normalized);
+    if (exactMatch) return exactMatch.name;
+
+    const firstWord = normalized.split(' ')[0];
+    const fuzzyMatch = this.categories.find(c => c.name.toLowerCase().startsWith(firstWord));
+    if (fuzzyMatch) return fuzzyMatch.name;
+
+    if (normalized.includes('khác')) return 'Khác';
+    if (normalized.length < 3) return 'Khác';
+
+    return cleaned;
+  }
+
+  private formatPercent(value: number, total: number): string {
+    if (total === 0) return '0%';
+    const percent = (value / total) * 100;
+    const formatted = percent >= 10 ? percent.toFixed(0) : percent.toFixed(1);
+    return `${formatted.replace(/\.0$/, '')}%`;
+  }
+
+  private prepareExpenseCategoryData(expenses: Transaction[]): { name: string; value: number }[] {
+    const rawData = d3.rollups(
+      expenses,
+      v => d3.sum(v, d => d.amount),
+      d => this.getTransactionCategory(d)
+    ).map(([name, value]) => ({ name, value }));
+
+    const total = d3.sum(rawData, d => d.value);
+    const grouped: { [key: string]: number } = {};
+
+    rawData.forEach(item => {
+      const percent = total > 0 ? (item.value / total) * 100 : 0;
+      if (item.name === 'Khác' || percent < 1) {
+        grouped['Khác'] = (grouped['Khác'] || 0) + item.value;
+      } else {
+        grouped[item.name] = (grouped[item.name] || 0) + item.value;
+      }
+    });
+
+    const result = Object.entries(grouped)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+
+    console.log('🔍 Category Data Preparation:', {
+      rawCategories: rawData.length,
+      groupedCategories: Object.keys(grouped).length,
+      categories: result.map(c => ({ name: c.name, value: c.value }))
+    });
+
+    return result;
+  }
+
+  private getCategoryColor(category: string): string {
+    const colors = [
+      '#f97316', '#06b6d4', '#8b5cf6', '#10b981', '#f59e0b',
+      '#ef4444', '#6366f1', '#84cc16', '#ec4899', '#14b8a6'
+    ];
+
+    // Initialize color map if not exists
+    if (!this.categoryColorMap) {
+      this.categoryColorMap = {};
+    }
+
+    // Assign color if not already assigned
+    if (!this.categoryColorMap[category]) {
+      const usedColors = Object.values(this.categoryColorMap);
+      const availableColors = colors.filter(c => !usedColors.includes(c));
+      this.categoryColorMap[category] = availableColors.length > 0
+        ? availableColors[0]
+        : colors[Object.keys(this.categoryColorMap).length % colors.length];
+    }
+
+    return this.categoryColorMap[category];
+  }
+
+  private getCategoryIcon(category: string): string {
+    const icons: Record<string, string> = {
+      'Ăn uống': '🍜',
+      'Di chuyển': '🚗',
+      'Mua sắm': '🛍️',
+      'Giải trí': '🎮',
+      'Sức khỏe': '🏥',
+      'Giáo dục': '📚',
+      'Khác': '📦'
+    };
+    return icons[category] || '📦';
+  }
+
+  private renderCategoriesDetailedList(categoryData: { name: string; value: number }[], totalExpense: number): string {
+    const sortedData = [...categoryData].sort((a, b) => b.value - a.value);
+
+    return `
+      <div class="space-y-4 animate-in fade-in duration-500">
+        <div class="bg-slate-100 dark:bg-slate-800 rounded-xl p-4">
+          <div class="text-center">
+            <div class="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Tổng quan chi tiêu</div>
+            <div class="grid grid-cols-2 gap-4 text-xs text-slate-600 dark:text-slate-400">
+              <div>Tổng khoản: ${categoryData.length}</div>
+              <div>Tổng tiền: ${this.formatCurrency(totalExpense)}</div>
+            </div>
+          </div>
+        </div>
+        <div class="space-y-3">
+          ${sortedData.map((category) => {
+            const percentage = (category.value / totalExpense) * 100;
+            const color = this.getCategoryColor(category.name);
+
+            return `
+              <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                <div class="space-y-2">
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm font-medium text-slate-900 dark:text-white">${category.name}</span>
+                    <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">${this.formatCurrency(category.value)}</span>
+                  </div>
+                  <div class="space-y-1">
+                    <div class="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+                      <span>Chiếm</span>
+                      <span>${percentage.toFixed(1)}%</span>
+                    </div>
+                    <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3">
+                      <div class="h-3 rounded-full transition-all duration-500" style="width: ${percentage}%; background-color: ${color}"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  private renderCategoriesSummary(totalExpense: number): string {
+    return `
+      <div class="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/50 dark:to-indigo-950/50 rounded-2xl p-4 border border-blue-200 dark:border-blue-800">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+            <i data-lucide="list" class="w-5 h-5 text-blue-600 dark:text-blue-400"></i>
+          </div>
+          <div>
+            <p class="text-sm font-medium text-blue-900 dark:text-blue-100">Tổng chi tiêu</p>
+            <p class="text-lg font-bold text-blue-700 dark:text-blue-300">${this.formatCurrency(totalExpense)}</p>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderComparisonDonut(categoryData: { name: string; value: number }[], totalExpense: number, isDark: boolean, comparison: any): string {
+    const containerId = `comparison-chart-${Date.now()}`;
+    const width = 320;
+    const height = 320;
+    const radius = Math.min(width, height) / 2;
+
+    const comparisonData = [
+      { name: 'Tuần này', value: comparison.currentTotal },
+      { name: 'Tuần trước', value: comparison.previousTotal }
+    ];
+
+    setTimeout(() => this.renderComparisonSVG(containerId, comparisonData, isDark, width, height, radius), 0);
+
+    return `
+      <div class="flex flex-col items-center justify-center h-full space-y-4">
+        <div class="relative w-[320px] h-[320px] rounded-[2rem] bg-slate-50 dark:bg-slate-950 overflow-hidden flex items-center justify-center">
+          <div id="${containerId}" class="w-full h-full flex items-center justify-center" role="img" aria-label="Biểu đồ so sánh chi tiêu"></div>
+          <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div class="text-center">
+              <p class="text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-400 dark:text-slate-500">Thay đổi</p>
+              <p class="text-2xl font-black ${comparison.trendDirection === 'up' ? 'text-red-600' : comparison.trendDirection === 'down' ? 'text-green-600' : 'text-slate-600'}">${comparison.diff > 0 ? '+' : ''}${comparison.diff}%</p>
+            </div>
+          </div>
+        </div>
+        <div class="flex flex-col gap-4">
+          <div class="text-center">
+            <div class="w-4 h-4 rounded-full bg-[#f97316] mx-auto mb-1"></div>
+            <p class="text-sm font-medium text-slate-700 dark:text-slate-300">Tuần này</p>
+            <p class="text-lg font-bold text-slate-900 dark:text-white">${this.formatCurrency(comparison.currentTotal)}</p>
+          </div>
+          <div class="text-center">
+            <div class="w-4 h-4 rounded-full bg-[#10b981] mx-auto mb-1"></div>
+            <p class="text-sm font-medium text-slate-700 dark:text-slate-300">Tuần trước</p>
+            <p class="text-lg font-bold text-slate-900 dark:text-white">${this.formatCurrency(comparison.previousTotal)}</p>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderComparisonSVG(containerId: string, comparisonData: any[], isDark: boolean, width: number, height: number, radius: number) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height)
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .append('g')
+      .attr('transform', `translate(${width / 2}, ${height / 2})`);
+
+    const colors = ['#f97316', '#10b981']; // Orange for current, green for previous
+
+    const color = d3.scaleOrdinal<string>()
+      .domain(comparisonData.map(d => d.name))
+      .range(colors);
+
+    const pie = d3.pie<{ name: string; value: number }>()
+      .value(d => d.value)
+      .sort(null); // Keep order as is
+
+    const arc = d3.arc<d3.PieArcDatum<{ name: string; value: number }>>()
+      .innerRadius(radius * 0.6)
+      .outerRadius(radius * 0.9)
+      .cornerRadius(8)
+      .padAngle(0.02);
+
+    const arcs = svg.selectAll('arc')
+      .data(pie(comparisonData))
+      .enter()
+      .append('g')
+      .attr('class', 'arc');
+
+    arcs.append('path')
+      .attr('fill', d => color(d.data.name))
+      .attr('d', d => arc(d) as string)
+      .style('opacity', 0.9)
+      .transition()
+      .duration(1200)
+      .attrTween('d', function(this: SVGPathElement, d: d3.PieArcDatum<{ name: string; value: number; }>) {
+        const i = d3.interpolate({ startAngle: 0, endAngle: 0 }, d);
+        return function(t) { return arc(i(t))!; };
+      });
+  }
+
+  private renderComparisonSummary(comparison: any): string {
+    return `
+      <div class="bg-gradient-to-r ${comparison.trendDirection === 'up' ? 'from-orange-50 to-red-50 dark:from-orange-950/50 dark:to-red-950/50' : comparison.trendDirection === 'down' ? 'from-emerald-50 to-green-50 dark:from-emerald-950/50 dark:to-green-950/50' : 'from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-700'} rounded-2xl p-4 border ${comparison.trendDirection === 'up' ? 'border-orange-200 dark:border-orange-800' : comparison.trendDirection === 'down' ? 'border-emerald-200 dark:border-emerald-800' : 'border-slate-200 dark:border-slate-700'}">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-full ${comparison.trendDirection === 'up' ? 'bg-orange-100 dark:bg-orange-900' : comparison.trendDirection === 'down' ? 'bg-emerald-100 dark:bg-emerald-900' : 'bg-slate-100 dark:bg-slate-800'} flex items-center justify-center">
+            <i data-lucide="trending-${comparison.trendDirection === 'up' ? 'up' : comparison.trendDirection === 'down' ? 'down' : 'right'}" class="w-5 h-5 ${comparison.trendDirection === 'up' ? 'text-orange-600 dark:text-orange-400' : comparison.trendDirection === 'down' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}"></i>
+          </div>
+          <div>
+            <p class="text-sm font-medium ${comparison.trendDirection === 'up' ? 'text-orange-900 dark:text-orange-100' : comparison.trendDirection === 'down' ? 'text-emerald-900 dark:text-emerald-100' : 'text-slate-900 dark:text-slate-100'}">Xu hướng chi tiêu</p>
+            <p class="text-lg font-bold ${comparison.trendDirection === 'up' ? 'text-orange-700 dark:text-orange-300' : comparison.trendDirection === 'down' ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-700 dark:text-slate-300'}">${comparison.label}</p>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderExportPDFView(categoryData: { name: string; value: number }[], totalExpense: number, comparison: any): string {
+    return `
+      <div class="flex flex-col items-center justify-center h-full space-y-6 animate-in fade-in duration-500">
+        <div class="text-center">
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-2">Xuất PDF</h3>
+          <p class="text-sm text-slate-600 dark:text-slate-400">Tải xuống báo cáo chi tiêu đầy đủ</p>
+        </div>
+
+        <div class="bg-slate-50 dark:bg-slate-800 rounded-xl p-6 w-full max-w-md">
+          <div class="space-y-4">
+            <div class="text-center">
+              <p class="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Báo cáo sẽ bao gồm:</p>
+              <ul class="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                <li>• Tổng chi tiêu: ${this.formatCurrency(totalExpense)}</li>
+                <li>• Biểu đồ phân bố chi tiêu</li>
+                <li>• Danh sách chi tiết các danh mục</li>
+                <li>• So sánh với kỳ trước: ${comparison.label}</li>
+              </ul>
+            </div>
+
+            <button onclick="expenseManager.exportToPDF()" class="w-full flex items-center justify-center gap-3 p-4 bg-orange-500 hover:bg-orange-600 text-white rounded-xl transition-colors group">
+              <i data-lucide="download" class="w-5 h-5"></i>
+              <span class="font-medium">Xuất PDF</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private getPreviousPeriodLabel(period: string): string {
+    const now = new Date();
+    let days: number;
+
+    switch (period) {
+      case '7d': days = 7; break;
+      case '30d': days = 30; break;
+      case '90d': days = 90; break;
+      default: days = 7;
+    }
+
+    const previousEnd = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+    const previousStart = new Date(previousEnd.getTime() - days * 24 * 60 * 60 * 1000);
+
+    return `${previousStart.toLocaleDateString('vi-VN')} - ${previousEnd.toLocaleDateString('vi-VN')}`;
+  }
+
+  private getPeriodLabel(period: string): string {
+    switch (period) {
+      case '7d': return '7 ngày qua';
+      case '30d': return '30 ngày qua';
+      case '90d': return '90 ngày qua';
+      default: return '7 ngày qua';
+    }
+  }
+
+  private exportCurrentChartData() {
+    const expenses = this.transactions.filter(t => t.type === 'expense');
+    const filteredExpenses = this.filterTransactionsByPeriod(expenses, this.chartPeriod);
+    const categoryData = this.prepareExpenseCategoryData(filteredExpenses);
+    const totalExpense = d3.sum(categoryData, d => d.value);
+
+    this.exportChartData(categoryData, totalExpense);
+  }
+
+  private printChart() {
+    window.print();
   }
 }
 

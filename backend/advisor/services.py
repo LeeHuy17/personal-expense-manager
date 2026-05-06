@@ -94,8 +94,16 @@ def _refresh_spending_habits(user):
         )
 
 
+def _should_refresh_spending_habits(user, max_age_hours=6):
+    latest = SpendingHabit.objects.filter(user=user).order_by('-last_seen').values_list('last_seen', flat=True).first()
+    if not latest:
+        return True
+    return timezone.now() - latest > timedelta(hours=max_age_hours)
+
+
 def _build_habit_summary(user):
-    _refresh_spending_habits(user)
+    if _should_refresh_spending_habits(user):
+        _refresh_spending_habits(user)
     habits = SpendingHabit.objects.filter(user=user).order_by('-average_amount')[:4]
     if not habits:
         return 'Hiện tại bạn chưa có thói quen chi tiêu rõ ràng trong 30 ngày vừa qua.'

@@ -30,9 +30,9 @@ class ChiPhiSerializer(serializers.ModelSerializer):
 class ThuNhapSerializer(serializers.ModelSerializer):
     class Meta:
         model = ThuNhap
-        fields = '__all__'
+        fields = ['incomeId', 'amount', 'date', 'moTa', 'loai', 'user']
         # Quan trọng: Không cho phép Frontend tự gửi userId lên để tránh giả mạo
-        read_only_fields = ['user'] 
+        read_only_fields = ['user', 'incomeId'] 
 
     def validate_amount(self, value):
         # Chặn trường hợp nhập số âm hoặc bằng 0

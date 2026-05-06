@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Add Mock Data</title>
+</head>
+<body>
+    <h1>Mock Data Setup</h1>
+    <button onclick="addMockData()">Add Mock Transactions</button>
+    <p id="status"></p>
+
+    <script>
+        function addMockData() {
+            const mockTransactions = [
+                { 
+                    id: '1', 
+                    description: 'Ăn sushi tại quán Otori', 
+                    amount: 1000000, 
+                    type: 'expense', 
+                    category_name: 'Ăn uống', 
+                    date: '2026-05-01T19:30:00Z',
+                    chiPhiId: '1',
+                    incomeId: null
+                },
+                { 
+                    id: '2', 
+                    description: 'Đổ xăng máy xe', 
+                    amount: 2000000, 
+                    type: 'expense', 
+                    category_name: 'Di chuyển', 
+                    date: '2026-05-02T09:00:00Z',
+                    chiPhiId: '2',
+                    incomeId: null
+                },
+                { 
+                    id: '3', 
+                    description: 'Mua quần áo tại Aeon', 
+                    amount: 3000000, 
+                    type: 'expense', 
+                    category_name: 'Mua sắm', 
+                    date: '2026-05-03T14:20:00Z',
+                    chiPhiId: '3',
+                    incomeId: null
+                },
+                { 
+                    id: '4', 
+                    description: 'Xem phim tại BHD', 
+                    amount: 400000, 
+                    type: 'expense', 
+                    category_name: 'Giải trí', 
+                    date: '2026-05-04T18:00:00Z',
+                    chiPhiId: '4',
+                    incomeId: null
+                },
+            ];
+
+            localStorage.setItem('transactions', JSON.stringify(mockTransactions));
+            document.getElementById('status').innerText = '✅ Mock data added! Redirecting...';
+            setTimeout(() => {
+                window.location.href = 'http://localhost:3007/?view=dashboard';
+            }, 1000);
+        }
+    </script>
+</body>
+</html>
