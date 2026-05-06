@@ -70,6 +70,124 @@ async function authFetch(url: string, options: RequestInit = {}) {
   return response;
 }
 
+function showGlobalToast(message: string, type: 'success' | 'error' | 'warning' = 'success') {
+  if ((window as any).expenseManager && typeof (window as any).expenseManager.showToast === 'function') {
+    (window as any).expenseManager.showToast(message, type);
+  } else {
+    console[type === 'error' ? 'error' : 'log'](message);
+  }
+}
+
+function isCurrentUserAdmin(): boolean {
+  return localStorage.getItem('isAdmin') === 'true' && localStorage.getItem('isLoggedIn') === 'true';
+}
+
+function showAdminControls(): void {
+  const adminBtn = document.getElementById('dropdown-admin-btn');
+  if (!adminBtn) return;
+  if (isCurrentUserAdmin()) {
+    adminBtn.classList.remove('hidden');
+  } else {
+    adminBtn.classList.add('hidden');
+  }
+}
+
+async function loadAdminUsers(): Promise<void> {
+  const tableBody = document.getElementById('admin-users-table-body');
+  const emptyEl = document.getElementById('admin-users-empty');
+  const errorEl = document.getElementById('admin-users-error');
+  if (tableBody) tableBody.innerHTML = '';
+  if (emptyEl) emptyEl.classList.add('hidden');
+  if (errorEl) {
+    errorEl.textContent = '';
+    errorEl.classList.add('hidden');
+  }
+
+  try {
+    const response = await authFetch('/accounts/users/');
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: 'Không thể tải danh sách người dùng.' }));
+      throw new Error(err.detail || err.error || 'Không thể tải danh sách người dùng.');
+    }
+
+    const users = await response.json();
+    if (!Array.isArray(users)) {
+      throw new Error('Dữ liệu người dùng không hợp lệ.');
+    }
+
+    if (users.length === 0) {
+      emptyEl?.classList.remove('hidden');
+      return;
+    }
+
+    users.forEach((user: any) => {
+      const row = document.createElement('tr');
+      row.className = 'border-b border-slate-100 dark:border-slate-800';
+      row.innerHTML = `
+        <td class="px-4 py-3 text-sm font-medium text-slate-900 dark:text-white">${user.id}</td>
+        <td class="px-4 py-3 text-sm">${user.username}</td>
+        <td class="px-4 py-3 text-sm break-all">${user.email}</td>
+        <td class="px-4 py-3 text-sm">${user.is_active ? 'Yes' : 'No'}</td>
+        <td class="px-4 py-3 text-sm">${user.is_staff ? 'Yes' : 'No'}</td>
+        <td class="px-4 py-3 text-sm">${user.date_joined ? new Date(user.date_joined).toLocaleString('vi-VN') : '-'}</td>
+        <td class="px-4 py-3 text-sm">${user.last_login ? new Date(user.last_login).toLocaleString('vi-VN') : '-'}</td>
+        <td class="px-4 py-3 text-sm flex gap-2">
+          <button data-user-id="${user.id}" class="admin-delete-user px-3 py-2 bg-rose-500 text-white rounded-2xl text-xs font-semibold hover:bg-rose-600 transition">Xóa</button>
+        </td>
+      `;
+      tableBody?.appendChild(row);
+    });
+
+    tableBody?.querySelectorAll('.admin-delete-user').forEach((button) => {
+      button.addEventListener('click', async (event) => {
+        const target = event.currentTarget as HTMLButtonElement;
+        const userId = Number(target.dataset.userId);
+        await deleteAdminUser(userId);
+      });
+    });
+
+    if (typeof createIcons === 'function' && icons) {
+      createIcons({ icons });
+    }
+  } catch (error) {
+    if (errorEl) {
+      errorEl.textContent = error instanceof Error ? error.message : 'Lỗi không xác định khi tải danh sách người dùng.';
+      errorEl.classList.remove('hidden');
+    }
+  }
+}
+
+async function deleteAdminUser(userId: number): Promise<void> {
+  if (!confirm('Bạn có chắc chắn muốn xóa người dùng này?')) return;
+
+  try {
+    const response = await authFetch(`/accounts/users/${userId}/`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: 'Không thể xóa người dùng.' }));
+      throw new Error(err.detail || err.error || 'Không thể xóa người dùng.');
+    }
+
+    showGlobalToast('Người dùng đã được xóa thành công.', 'success');
+    await loadAdminUsers();
+  } catch (error) {
+    showGlobalToast(error instanceof Error ? error.message : 'Lỗi không xác định khi xóa người dùng.', 'error');
+  }
+}
+
+function showAdminSection(): void {
+  const section = document.getElementById('admin-section');
+  if (!section) return;
+  section.classList.remove('hidden');
+  section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (isCurrentUserAdmin()) {
+    loadAdminUsers();
+  } else {
+    showGlobalToast('Bạn không có quyền admin.', 'error');
+  }
+}
+
 function normalizeServerGoals(goals: any[]): Goal[] {
   return goals.map((goal) => ({
     id: String(goal.id ?? goal.uuid ?? Math.random().toString(36).slice(2, 10)),
@@ -1045,6 +1163,17 @@ function updateNavbar(): void {
             profileBtn.style.setProperty('display', 'flex', 'important');
             profileBtn.classList.remove('hidden');
         }
+
+        const adminBtn = document.getElementById('dropdown-admin-btn');
+        if (adminBtn) {
+            if (isCurrentUserAdmin()) {
+                adminBtn.style.setProperty('display', 'flex', 'important');
+                adminBtn.classList.remove('hidden');
+            } else {
+                adminBtn.style.setProperty('display', 'none', 'important');
+                adminBtn.classList.add('hidden');
+            }
+        }
         
         // Cập nhật tên chào mừng
         if (userGreeting && username) {
@@ -2006,6 +2135,9 @@ class ExpenseManager {
     // Auth listeners
     document.getElementById('dropdown-login-btn')?.addEventListener('click', () => this.openAuthModal('login'));
     document.getElementById('dropdown-register-btn')?.addEventListener('click', () => this.openAuthModal('register'));
+    document.getElementById('dropdown-admin-btn')?.addEventListener('click', () => {
+      window.location.href = '/admin/';
+    });
     document.getElementById('dropdown-logout-btn')?.addEventListener('click', () => {
       this.isLoggedIn = false;
       this.showToast('Đã đăng xuất', 'warning');
@@ -2303,32 +2435,36 @@ class ExpenseManager {
   }
 
   private loadData() {
-    const savedTransactions = localStorage.getItem('transactions');
-    if (savedTransactions) this.transactions = JSON.parse(savedTransactions);
+    const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
 
-    const savedCategories = localStorage.getItem('categories');
-    if (savedCategories) {
-      const parsed = JSON.parse(savedCategories);
-      // Migration check: if categories are strings, reset to default or map them
-      if (parsed.length > 0 && typeof parsed[0] === 'string') {
-        // Keep default categories if migration is needed
-        localStorage.removeItem('categories');
-      } else {
-        this.categories = parsed.map((item: any, index: number) => ({
-          id: item.id ?? `cached-${index}`,
-          name: item.name,
-          icon: item.icon,
-          color: item.color,
-          type: item.type
-        }));
+    if (!isLoggedIn) {
+      const savedTransactions = localStorage.getItem('transactions');
+      if (savedTransactions) this.transactions = JSON.parse(savedTransactions);
+
+      const savedCategories = localStorage.getItem('categories');
+      if (savedCategories) {
+        const parsed = JSON.parse(savedCategories);
+        // Migration check: if categories are strings, reset to default or map them
+        if (parsed.length > 0 && typeof parsed[0] === 'string') {
+          // Keep default categories if migration is needed
+          localStorage.removeItem('categories');
+        } else {
+          this.categories = parsed.map((item: any, index: number) => ({
+            id: item.id ?? `cached-${index}`,
+            name: item.name,
+            icon: item.icon,
+            color: item.color,
+            type: item.type
+          }));
+        }
       }
+
+      const savedBudgets = localStorage.getItem('categoryBudgets');
+      if (savedBudgets) this.categoryBudgets = JSON.parse(savedBudgets);
+
+      const savedGoals = localStorage.getItem('goals');
+      if (savedGoals) this.goals = JSON.parse(savedGoals);
     }
-
-    const savedBudgets = localStorage.getItem('categoryBudgets');
-    if (savedBudgets) this.categoryBudgets = JSON.parse(savedBudgets);
-
-    const savedGoals = localStorage.getItem('goals');
-    if (savedGoals) this.goals = JSON.parse(savedGoals);
   }
 
   private saveData() {

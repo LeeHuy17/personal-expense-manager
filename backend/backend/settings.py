@@ -114,7 +114,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'personal_expense_manager', # Tên DB bạn tạo trong Workbench
         'USER': 'root',
-        'PASSWORD': 'lehuy173',
+        'PASSWORD': '',
         'HOST': '127.0.0.1',
         'PORT': '3306',
     }

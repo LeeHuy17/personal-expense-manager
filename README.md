@@ -27,7 +27,7 @@ Dự án hiện đang được triển khai với các nhánh tính năng (featu
 4. **Merge**: Sau khi hoàn thành và test, thực hiện Pull Request để merge vào nhánh `developers`.
 
 ## ⚙️ Hướng dẫn Cấu hình Backend (Local)
-1. **Cài đặt môi trường**: `python -m venv venv` và kích hoạt.
+1. **Cài đặt môi trường**: `python -m venv venv` và kích hoạt ` .\venv\Scripts\Activate.ps1`.
 2. **Cài đặt thư viện**: `pip install -r requirements.txt`.
 3. **Database**: Đảm bảo MySQL đã chạy với schema `personal_expense_manager`.
 4. **Chạy server**: `python manage.py runserver`.

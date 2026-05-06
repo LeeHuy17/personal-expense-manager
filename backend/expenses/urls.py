@@ -1,6 +1,13 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import ChiPhiViewSet, ThuNhapViewSet, LoaiViewSet, UserProfileView
+from .views import (
+    ChiPhiViewSet,
+    ThuNhapViewSet,
+    LoaiViewSet,
+    UserProfileView,
+    AdminCategoryListView,
+    AdminCategoryDetailView,
+)
 
 # Sử dụng Router để tự động tạo các hành động CRUD
 router = DefaultRouter()
@@ -15,6 +22,8 @@ router.register(r'incomes', ThuNhapViewSet, basename='thunhap')
 router.register(r'categories', LoaiViewSet, basename='loai')
 
 urlpatterns = [
+    path('admin/categories/', AdminCategoryListView.as_view(), name='admin_category_list'),
+    path('admin/categories/<int:category_id>/', AdminCategoryDetailView.as_view(), name='admin_category_detail'),
     path('', include(router.urls)),
     path('profile/', UserProfileView.as_view(), name='user-profile'),
 ]

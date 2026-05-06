@@ -1,12 +1,13 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.authtoken.models import Token
 from .serializers import RegisterSerializer 
 from .models import PasswordResetRequest
 from django.contrib.auth.models import User
 from django.contrib.auth.tokens import default_token_generator
+from django.shortcuts import get_object_or_404
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
 from django.core.mail import send_mail
@@ -71,7 +72,9 @@ class LoginView(APIView):
             "message": "Đăng nhập thành công",
             "username": user.username,
             "email": user.email,
-            "id": user.id
+            "id": user.id,
+            "is_staff": user.is_staff,
+            "is_superuser": user.is_superuser,
         }
         
         # Nếu rest_framework.authtoken được cài, tạo token
@@ -208,6 +211,62 @@ class ResetPasswordView(APIView):
             return Response({
                 "error": "Không thể xác nhận người dùng"
             }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class UserListView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        users = User.objects.order_by('date_joined')
+        data = [
+            {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'is_active': user.is_active,
+                'is_staff': user.is_staff,
+                'is_superuser': user.is_superuser,
+                'date_joined': user.date_joined,
+                'last_login': user.last_login,
+            }
+            for user in users
+        ]
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class UserDetailView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def delete(self, request, user_id):
+        if request.user.id == int(user_id):
+            return Response({
+                'error': 'Không thể xóa chính bạn.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        user = get_object_or_404(User, pk=user_id)
+        user.delete()
+        return Response({'message': 'Người dùng đã bị xóa thành công.'}, status=status.HTTP_200_OK)
+
+    def patch(self, request, user_id):
+        user = get_object_or_404(User, pk=user_id)
+
+        if 'is_active' in request.data:
+            user.is_active = bool(request.data.get('is_active'))
+        if 'is_staff' in request.data:
+            user.is_staff = bool(request.data.get('is_staff'))
+
+        user.save()
+
+        return Response({
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'is_active': user.is_active,
+            'is_staff': user.is_staff,
+            'is_superuser': user.is_superuser,
+            'date_joined': user.date_joined,
+            'last_login': user.last_login,
+        }, status=status.HTTP_200_OK)
 
 
 class CheckResetStatusView(APIView):

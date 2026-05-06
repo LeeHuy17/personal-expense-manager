@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from django.db.models import ProtectedError
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
@@ -5,6 +6,8 @@ from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
 from .models import ChiPhi, ThuNhap, Loai, Profile
 from .serializers import ChiPhiSerializer, ThuNhapSerializer, LoaiSerializer
+
+AuthUser = get_user_model()
 
 class ThuNhapViewSet(viewsets.ModelViewSet):
     serializer_class = ThuNhapSerializer
@@ -115,3 +118,65 @@ class UserProfileView(APIView):
                 "avatar_url": avatar_url,
             }, status=200)
         return Response({"error": "Không có file"}, status=400)
+
+
+class AdminCategoryListView(APIView):
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def get(self, request):
+        user_id = request.query_params.get('user_id')
+        categories = Loai.objects.all().order_by('user__username', 'tenLoai')
+        if user_id:
+            categories = categories.filter(user__id=user_id)
+
+        data = []
+        for category in categories:
+            data.append({
+                'id': category.loaiId,
+                'name': category.tenLoai,
+                'type': category.type,
+                'icon': category.icon,
+                'color': category.color,
+                'user_id': category.user.id if category.user else None,
+                'username': category.user.username if category.user else 'Không rõ',
+                'expense_count': ChiPhi.objects.filter(loai=category).count(),
+                'income_count': ThuNhap.objects.filter(loai=category).count(),
+            })
+
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class AdminCategoryDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def patch(self, request, category_id):
+        category = Loai.objects.filter(loaiId=category_id).first()
+        if not category:
+            return Response({'error': 'Danh mục không tồn tại.'}, status=status.HTTP_404_NOT_FOUND)
+
+        category.tenLoai = request.data.get('name', category.tenLoai)
+        category.type = request.data.get('type', category.type)
+        category.icon = request.data.get('icon', category.icon)
+        category.color = request.data.get('color', category.color)
+        category.save()
+
+        return Response({
+            'id': category.loaiId,
+            'name': category.tenLoai,
+            'type': category.type,
+            'icon': category.icon,
+            'color': category.color,
+            'user_id': category.user.id if category.user else None,
+            'username': category.user.username if category.user else 'Không rõ',
+        }, status=status.HTTP_200_OK)
+
+    def delete(self, request, category_id):
+        category = Loai.objects.filter(loaiId=category_id).first()
+        if not category:
+            return Response({'error': 'Danh mục không tồn tại.'}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            category.delete()
+            return Response({'message': 'Danh mục đã được xóa.'}, status=status.HTTP_200_OK)
+        except ProtectedError:
+            return Response({'error': 'Không thể xóa danh mục đã có giao dịch liên quan.'}, status=status.HTTP_400_BAD_REQUEST)
