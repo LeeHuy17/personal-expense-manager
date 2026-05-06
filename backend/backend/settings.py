@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'shared_fund',
     'search_filter',
     'savings',
+    'budgets',
     
     # Thêm DRF để làm API 
     'rest_framework',

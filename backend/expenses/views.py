@@ -17,14 +17,21 @@ class ThuNhapViewSet(viewsets.ModelViewSet):
         return ThuNhap.objects.filter(user=user).order_by('-date')
 
     def create(self, request, *args, **kwargs):
+        print(f"[DEBUG] ThuNhapViewSet.create() - User: {request.user.username}, Data: {request.data}")
         try:
             serializer = self.get_serializer(data=request.data)
+            print(f"[DEBUG] Serializer is_valid: {serializer.is_valid()}")
             if not serializer.is_valid():
+                print(f"[DEBUG] Serializer errors: {serializer.errors}")
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
             self.perform_create(serializer)
             headers = self.get_success_headers(serializer.data)
+            print(f"[DEBUG] Successfully created ThuNhap: {serializer.data}")
             return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
         except Exception as e:
+            print(f"[DEBUG] Error creating ThuNhap: {e}")
+            import traceback
+            print(f"[DEBUG] Traceback: {traceback.format_exc()}")
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def perform_create(self, serializer):
@@ -34,6 +41,7 @@ class ThuNhapViewSet(viewsets.ModelViewSet):
 class ChiPhiViewSet(viewsets.ModelViewSet):
     serializer_class = ChiPhiSerializer
     permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'chiPhiId'
 
     def get_queryset(self):
         # Tương tự: Bảo mật tuyệt đối dữ liệu chi phí
@@ -56,6 +64,7 @@ class ChiPhiViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
     def destroy(self, request, *args, **kwargs):
+        print(f"[DEBUG] ChiPhiViewSet.destroy() - User: {request.user.username}, chiPhiId: {kwargs.get('chiPhiId') or kwargs.get('pk')}")
         try:
             instance = self.get_object()
             self.perform_destroy(instance)

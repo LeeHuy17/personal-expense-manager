@@ -1079,6 +1079,30 @@
               </div>
             </div>
 
+            <div class="grid grid-cols-2 gap-4">
+              <div class="space-y-2">
+                <label class="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Tháng</label>
+                <select id="budget-month" class="w-full px-6 py-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-orange-500 hover:border-orange-200 dark:hover:border-slate-700 focus:bg-white dark:focus:bg-slate-900 transition-all outline-none font-bold text-slate-900 dark:text-white cursor-pointer" required>
+                  <option value="1">Tháng 1</option>
+                  <option value="2">Tháng 2</option>
+                  <option value="3">Tháng 3</option>
+                  <option value="4">Tháng 4</option>
+                  <option value="5">Tháng 5</option>
+                  <option value="6">Tháng 6</option>
+                  <option value="7">Tháng 7</option>
+                  <option value="8">Tháng 8</option>
+                  <option value="9">Tháng 9</option>
+                  <option value="10">Tháng 10</option>
+                  <option value="11">Tháng 11</option>
+                  <option value="12">Tháng 12</option>
+                </select>
+              </div>
+              <div class="space-y-2">
+                <label class="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Năm</label>
+                <input type="number" id="budget-year" class="w-full px-6 py-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-orange-500 hover:border-orange-200 dark:hover:border-slate-700 focus:bg-white dark:focus:bg-slate-900 transition-all outline-none font-bold text-slate-900 dark:text-white" placeholder="2024" min="2020" max="2030" required>
+              </div>
+            </div>
+
             <button type="submit" class="w-full py-5 bg-orange-600 hover:bg-orange-700 text-white rounded-2xl font-black text-lg shadow-xl shadow-orange-200 dark:shadow-none transition-all hover:-translate-y-1 active:translate-y-0 hover:scale-[1.02]">
               Lưu ngân sách
             </button>
